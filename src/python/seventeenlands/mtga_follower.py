@@ -36,6 +36,70 @@ import seventeenlands.logging_utils
 
 logger = seventeenlands.logging_utils.get_logger("17Lands")
 
+class MockApiClient:
+    def __init__(self, host: str) -> None:
+        self.host = host
+        logger.info(f"Using MockApiClient - no data will be sent to {host}")
+
+    def get_client_version_info(self, params: dict[str, Any]) -> Any:
+        logger.debug(f"MockApiClient: Would get client version info with params: {params}")
+        class MockResponse:
+            text = '{"min_version": "0.0.0"}'
+            status_code = 200
+        return MockResponse()
+
+    def submit_collection(self, blob: dict[str, Any]) -> None:
+        logger.debug("MockApiClient: Would submit collection")
+
+    def submit_deck_submission(self, blob: dict[str, Any]) -> None:
+        logger.debug("MockApiClient: Would submit deck submission")
+
+    def submit_draft_pack(self, blob: dict[str, Any]) -> None:
+        logger.debug("MockApiClient: Would submit draft pack")
+
+    def submit_draft_pick(self, blob: dict[str, Any]) -> None:
+        logger.debug("MockApiClient: Would submit draft pick")
+
+    def submit_event_course_submission(self, blob: dict[str, Any]) -> None:
+        logger.debug("MockApiClient: Would submit event course submission")
+
+    def submit_joined_event(self, blob: dict[str, Any]) -> None:
+        logger.debug("MockApiClient: Would submit joined event")
+
+    def submit_event_ended(self, blob: dict[str, Any]) -> None:
+        logger.debug("MockApiClient: Would submit event ended")
+
+    def submit_event_submission(self, blob: dict[str, Any]) -> None:
+        logger.debug("MockApiClient: Would submit event submission")
+
+    def submit_game_result(self, blob: dict[str, Any]) -> None:
+        logger.debug("MockApiClient: Would submit game result")
+
+    def submit_human_draft_pack(self, blob: dict[str, Any]) -> None:
+        logger.debug("MockApiClient: Would submit human draft pack")
+
+    def submit_human_draft_pick(self, blob: dict[str, Any]) -> None:
+        logger.debug("MockApiClient: Would submit human draft pick")
+
+    def submit_inventory(self, blob: dict[str, Any]) -> None:
+        logger.debug("MockApiClient: Would submit inventory")
+
+    def submit_ongoing_events(self, blob: dict[str, Any]) -> None:
+        logger.debug("MockApiClient: Would submit ongoing events")
+
+    def submit_player_progress(self, blob: dict[str, Any]) -> None:
+        logger.debug("MockApiClient: Would submit player progress")
+
+    def submit_rank(self, blob: dict[str, Any]) -> None:
+        logger.debug("MockApiClient: Would submit rank")
+
+    def submit_user(self, blob: dict[str, Any]) -> None:
+        logger.debug("MockApiClient: Would submit user")
+
+    def submit_error_info(self, blob: dict[str, Any]) -> None:
+        logger.debug("MockApiClient: Would submit error info")
+
+
 CLIENT_VERSION = "0.1.44.p"
 
 UPDATE_CHECK_INTERVAL = datetime.timedelta(hours=1)
@@ -273,7 +337,7 @@ class Follower:
         self.game_service_metadata = None
         self.game_client_metadata = None
         self.objects_by_owner: defaultdict[Any, dict[Any, Any]] = defaultdict(dict)
-        self.objects_by_opponent: defaultdict[Any, dict[Any, Any]] = defaultdict(dict)
+        self.opponent_cards: list[int] = []
         self.opening_hand_count_by_seat: defaultdict[Any, int] = defaultdict(int)
         self.opening_hand: defaultdict[Any, list[Any]] = defaultdict(list)
         self.drawn_hands: defaultdict[Any, list[Any]] = defaultdict(list)
@@ -332,17 +396,17 @@ class Follower:
                             self.__handle_complete_log_entry()
                             last_modified_time = os.stat(filename).st_mtime
                             if file_size < last_file_size:
-                                logger.info(
-                                    f"Starting from beginning of file as file is smaller than before (previous = {last_file_size}; current = {file_size})"
-                                )
+                                # logger.info(
+                                #     f"Starting from beginning of file as file is smaller than before (previous = {last_file_size}; current = {file_size})"
+                                # )
                                 break
                             elif (
                                 last_modified_time
                                 > last_read_time + FILE_UPDATED_FORCE_REFRESH_SECONDS
                             ):
-                                logger.info(
-                                    f"Starting from beginning of file as file has been updated much more recently than the last read (previous = {last_read_time}; current = {last_modified_time})"
-                                )
+                                # # logger.info(
+                                #     f"Starting from beginning of file as file has been updated much more recently than the last read (previous = {last_read_time}; current = {last_modified_time})"
+                                # )
                                 break
                             elif follow:
                                 time.sleep(SLEEP_TIME)
@@ -648,7 +712,7 @@ class Follower:
                 "screen_name": self.user_screen_name,
                 "full_screen_name": self.full_screen_name,
             }
-            logger.info(f"Updating user info: {user_info}")
+            # logger.info(f"Updating user info: {user_info}")
             self._api_client.submit_user(self._add_base_api_data(user_info))
 
         except Exception as e:
@@ -690,9 +754,9 @@ class Follower:
                     step=None,
                 )
                 self.cur_opponent_match_id = game_room_config.get("matchId")
-                logger.info(
-                    f"Parsed opponent rank info as limited {self.cur_opponent_level} in match {self.cur_opponent_match_id}"
-                )
+                # logger.info(
+                #     f"Parsed opponent rank info as limited {self.cur_opponent_level} in match {self.cur_opponent_match_id}"
+                # )
 
         if updated_match_id and updated_event_id:
             self.current_match_id = updated_match_id
@@ -783,7 +847,10 @@ class Follower:
 
                     self.objects_by_owner[owner][instance_id] = card_id
                     if owner == 2:
-                        logger.info(f"{self.objects_by_owner[owner].values()}")
+                        opponent_cards_list = list(self.objects_by_owner[owner].values())
+                        if len(self.opponent_cards) < len(opponent_cards_list):
+                            self.opponent_cards = opponent_cards_list
+                            logger.info(f"Opponent cards: {self.opponent_cards}")
                     
 
                 for zone in game_state_message.get("zones", []):
@@ -925,9 +992,9 @@ class Follower:
                     "win_type": payload.get("WinningType"),
                     "game_end_reason": payload.get("WinningReason"),
                 }
-                logger.info(
-                    f"Added pending game result via LogBusinessEvents {self.pending_game_result}"
-                )
+                # logger.info(
+                #     f"Added pending game result via LogBusinessEvents {self.pending_game_result}"
+                # )
 
         except Exception as e:
             self._log_error(
@@ -955,7 +1022,7 @@ class Follower:
                 **self.pending_match_result,
                 **self.pending_game_submission,
             }
-            logger.info("Submitting queued game result")
+            # logger.info("Submitting queued game result")
             self._api_client.submit_game_result(self._add_base_api_data(full_game))
             self.pending_game_submission = {}
             self.__clear_game_data()
@@ -966,6 +1033,7 @@ class Follower:
 
         self.turn_count = 0
         self.objects_by_owner.clear()
+        self.opponent_cards.clear()
         self.opening_hand_count_by_seat.clear()
         self.opening_hand.clear()
         self.drawn_hands.clear()
@@ -1010,7 +1078,7 @@ class Follower:
             event = {
                 "courses": json_obj["Courses"],
             }
-            logger.info("Updated ongoing events")
+            # logger.info("Updated ongoing events")
             self._api_client.submit_ongoing_events(self._add_base_api_data(event))
 
         except Exception as e:
@@ -1026,7 +1094,7 @@ class Follower:
             event = {
                 "event_name": json_obj["EventName"],
             }
-            logger.info(f"Event ended: {event}")
+            # logger.info(f"Event ended: {event}")
             self._api_client.submit_event_ended(self._add_base_api_data(event))
 
         except Exception as e:
@@ -1046,7 +1114,7 @@ class Follower:
                 "course_id": json_obj["CourseId"],
                 "card_pool": json_obj["CardPool"],
             }
-            logger.info(f"Event course: {event}")
+            # logger.info(f"Event course: {event}")
             self._api_client.submit_event_course_submission(
                 self._add_base_api_data(event)
             )
@@ -1079,7 +1147,7 @@ class Follower:
                     "win_type": this_game_result.get("result"),
                     "game_end_reason": this_game_result.get("reason"),
                 }
-                logger.info(f"Added pending game result {self.pending_game_result}")
+                # logger.info(f"Added pending game result {self.pending_game_result}")
 
             match_result = next(
                 (r for r in results if r.get("scope") == "MatchScope_Match"), {}
@@ -1094,7 +1162,7 @@ class Follower:
                     self.pending_match_result["match_result_payload"] = (
                         match_game_room_state_changed_obj
                     )
-                logger.info(f"Added pending match result {self.pending_match_result}")
+                # logger.info(f"Added pending match result {self.pending_match_result}")
 
         except Exception as e:
             self._log_error(
@@ -1143,7 +1211,7 @@ class Follower:
             logger.info(f"Completed game: {game}")
 
             # Add the history to the blob after logging to avoid printing excessive logs
-            logger.info(f"Adding game history ({len(self.game_history_events)} events)")
+            # logger.info(f"Adding game history ({len(self.game_history_events)} events)")
             game["history"] = {
                 "seat_id": self.seat_id,
                 "opponent_seat_id": opponent_id,
@@ -1192,7 +1260,7 @@ class Follower:
                     "pick_number": int(json_obj["PickNumber"]),
                     "card_ids": [int(x) for x in json_obj["DraftPack"]],
                 }
-                logger.info(f"Draft pack: {pack}")
+                # logger.info(f"Draft pack: {pack}")
                 self._api_client.submit_draft_pack(self._add_base_api_data(pack))
 
             except Exception as e:
@@ -1217,7 +1285,7 @@ class Follower:
                 "card_id": None if card_id is None else int(card_id),
                 "card_ids": None if card_ids is None else [int(x) for x in card_ids],
             }
-            logger.info(f"Draft pick: {pick}")
+            # logger.info(f"Draft pick: {pick}")
             self._api_client.submit_draft_pick(self._add_base_api_data(pick))
 
         except Exception as e:
@@ -1233,7 +1301,7 @@ class Follower:
 
         try:
             self.cur_draft_event = json_obj["EventName"]
-            logger.info(f"Joined draft pod: {self.cur_draft_event}")
+            # logger.info(f"Joined draft pod: {self.cur_draft_event}")
 
         except Exception as e:
             self._log_error(
@@ -1250,7 +1318,7 @@ class Follower:
             self._api_client.submit_joined_event(
                 self._add_base_api_data({"payload": json_obj})
             )
-            logger.info("Joined event successfully")
+            # logger.info("Joined event successfully")
 
         except Exception as e:
             self._log_error(
@@ -1274,7 +1342,7 @@ class Follower:
                 "card_ids": json_obj["CardsInPack"],
                 "method": "LogBusiness",
             }
-            logger.info(f"Human draft pack (combined): {pack}")
+            # logger.info(f"Human draft pack (combined): {pack}")
             self._api_client.submit_human_draft_pack(self._add_base_api_data(pack))
 
         except Exception as e:
@@ -1300,7 +1368,7 @@ class Follower:
                 "auto_pick": json_obj["AutoPick"],
                 "time_remaining": json_obj["TimeRemainingOnPick"],
             }
-            logger.info(f"Human draft pick (combined): {pick}")
+            # logger.info(f"Human draft pick (combined): {pick}")
             self._api_client.submit_human_draft_pick(self._add_base_api_data(pick))
 
         except Exception as e:
@@ -1324,7 +1392,7 @@ class Follower:
                 "card_ids": [int(x) for x in json_obj["PackCards"].split(",")],
                 "method": "Draft.Notify",
             }
-            logger.info(f"Human draft pack (Draft.Notify): {pack}")
+            # logger.info(f"Human draft pack (Draft.Notify): {pack}")
             self._api_client.submit_human_draft_pack(self._add_base_api_data(pack))
 
         except Exception as e:
@@ -1347,7 +1415,7 @@ class Follower:
                 "pick_number": int(json_obj["Pick"]),
                 "card_ids": json_obj["GrpIds"],
             }
-            logger.info(f"Human draft pick (EventPlayerDraftMakePick): {pick}")
+            # logger.info(f"Human draft pick (EventPlayerDraftMakePick): {pick}")
             self._api_client.submit_human_draft_pick(self._add_base_api_data(pick))
 
         except Exception as e:
@@ -1381,7 +1449,7 @@ class Follower:
                 ),
                 "is_during_match": False,
             }
-            logger.info(f"Deck submission (Event_SetDeck): {deck}")
+            # logger.info(f"Deck submission (Event_SetDeck): {deck}")
             self._api_client.submit_deck_submission(self._add_base_api_data(deck))
 
         except Exception as e:
@@ -1396,7 +1464,7 @@ class Follower:
         try:
             self.cur_rank_data = json_obj
             self.cur_user = json_obj.get("playerId", self.cur_user)
-            logger.info(f"Parsed rank info for {self.cur_user}: {self.cur_rank_data}")
+            # logger.info(f"Parsed rank info for {self.cur_user}: {self.cur_rank_data}")
             data = {
                 "rank_data": self.cur_rank_data,
                 "limited_rank": None,
@@ -1414,15 +1482,15 @@ class Follower:
     def __handle_collection(self, json_obj: dict[str, Any]) -> None:
         """Handle 'PlayerInventory.GetPlayerCardsV3' messages."""
         if self.cur_user is None:
-            logger.info(
-                "Skipping collection submission because player id is still unknown"
-            )
+            # logger.info(
+            #     "Skipping collection submission because player id is still unknown"
+            # )
             return
 
         collection = {
             "card_counts": json_obj,
         }
-        logger.info(f"Collection submission of {len(json_obj)} cards")
+        # logger.info(f"Collection submission of {len(json_obj)} cards")
         self._api_client.submit_collection(self._add_base_api_data(collection))
 
     def __handle_inventory(self, json_obj: dict[str, Any]) -> None:
@@ -1450,7 +1518,7 @@ class Follower:
             blob = {
                 "inventory": json_obj,
             }
-            logger.info(f"Submitting inventory: {blob}")
+            # logger.info(f"Submitting inventory: {blob}")
             self._api_client.submit_inventory(self._add_base_api_data(blob))
 
         except Exception as e:
@@ -1466,7 +1534,7 @@ class Follower:
             blob = {
                 "progress": json_obj,
             }
-            logger.info("Submitting mastery progress")
+            # logger.info("Submitting mastery progress")
             self._api_client.submit_player_progress(self._add_base_api_data(blob))
 
         except Exception as e:
@@ -1649,7 +1717,7 @@ def show_update_message(response_data: dict[str, Any]) -> None:
 
 
 def verify_version(host: str, prompt_if_update_required: bool) -> bool:
-    api_client = seventeenlands.api_client.ApiClient(host=host)
+    api_client = MockApiClient(host=host)
     response = api_client.get_client_version_info(
         params={
             "client": "python",
@@ -1749,7 +1817,7 @@ def main() -> None:
         time.sleep(UPDATE_CHECK_INTERVAL.total_seconds())
 
     token = args.token
-    logger.info(f"Using token {token[:4]}...{token[-4:]}")
+    # logger.info(f"Using token {token[:4]}...{token[-4:]}")
 
     processing_loop(args, token)
 
