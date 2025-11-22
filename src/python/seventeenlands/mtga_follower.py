@@ -845,13 +845,12 @@ class Follower:
                     instance_id = game_object["instanceId"]
                     card_id = game_object["overlayGrpId"]
 
+                    previous_cards = list(self.objects_by_owner[owner].values()) if instance_id in self.objects_by_owner[owner] else None
                     self.objects_by_owner[owner][instance_id] = card_id
-                    if owner == 2:
-                        opponent_cards_list = list(self.objects_by_owner[owner].values())
-                        if len(self.opponent_cards) < len(opponent_cards_list):
-                            self.opponent_cards = opponent_cards_list
-                            logger.info(f"Opponent cards: {self.opponent_cards}")
+                    current_cards = list(self.objects_by_owner[owner].values())
                     
+                    if previous_cards is None or previous_cards != current_cards:
+                        logger.info(f"Player {owner} cards: {current_cards}")
 
                 for zone in game_state_message.get("zones", []):
                     if zone["type"] == "ZoneType_Hand":
@@ -1208,7 +1207,7 @@ class Follower:
                 "service_metadata": self.game_service_metadata,
                 "client_metadata": self.game_client_metadata,
             }
-            logger.info(f"Completed game: {game}")
+            logger.info(f"Completed game: {game["event_name"]} - {game["match_id"]}")
 
             # Add the history to the blob after logging to avoid printing excessive logs
             # logger.info(f"Adding game history ({len(self.game_history_events)} events)")
