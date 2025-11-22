@@ -6,6 +6,8 @@ from pydantic import BaseModel, Field
 
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
 
 from pathlib import Path
 from datetime import datetime
@@ -23,8 +25,8 @@ def find_project_root(marker=".git"):
 
 project_root = find_project_root()
 db_path = project_root / "database.db"
-schema_path = Path(__file__).resolve().parent / "schema.sql"
-
+schema_path = project_root / "app/schema.sql"
+template_path = project_root / "app/templates"
 
 ##############################################################################
 
@@ -121,7 +123,7 @@ async def lifespan(_app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 app.add_middleware(add_cors_middleware)
-
+templates = Jinja2Templates(directory=template_path)
 
 @app.middleware("http")
 async def add_logging_middleware(request: Request, call_next):
@@ -132,12 +134,22 @@ async def add_logging_middleware(request: Request, call_next):
 
 
 ##############################################################################
+# Routes
+##############################################################################
+@app.get("/", response_class=HTMLResponse)
+async def read_item(request: Request):
+    return templates.TemplateResponse(
+        request=request, name="base.html"
+    )
+
+# @app.get("/")
+# def root():
+#     return {"Hello": "World"}
 
 
-@app.get("/")
-def root():
-    return {"Hello": "World"}
-
+##############################################################################
+# API
+##############################################################################
 
 @app.get("/decks")
 def get_decks(conn: DBConnDep):
@@ -149,5 +161,5 @@ def get_decks(conn: DBConnDep):
 @app.get("/cards")
 def get_cards(conn: DBConnDep):
     cursor = conn.cursor()
-    cursor.execute("SELECT id, name FROM cards limit 10")
+    cursor.execute("SELECT id, name FROM cards limit 100")
     return [dict(row) for row in cursor.fetchall()]
