@@ -1,4 +1,5 @@
 .idea
+database.db
 AllPrintings.sqlite
 output_log*.txt
 Player*.log
