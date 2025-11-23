@@ -3,7 +3,7 @@
 {% block title %}Decks - AMD{% endblock %}
 {% block content %}
 <section>
-    <form hx-post="/add/untapped-decks">
+    <form hx-post="/add/untapped-decks" hx-target="body">
         <input type="text" name="html_doc" placeholder="HTML doc text">
         <button type="submit">Add Decks</button>
     </form>
@@ -11,7 +11,11 @@
 <section>
     <ul>
         {% for deck in decks %}
-        <li>{{ deck.name }}</li>
+        <li>
+            <h3>{{ deck.name }}</h3>
+            <button hx-get="/decks/{{ deck.id }}/cards" hx-target="#cards-{{ deck.id }}">Show Cards</button>
+            <div id="cards-{{ deck.id }}"></div>
+        </li>
         {% endfor %}
     </ul>
 </section>

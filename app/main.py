@@ -1,12 +1,11 @@
 import sqlite3
-from collections import defaultdict, namedtuple
+import asyncio
+from collections import namedtuple
 from contextlib import asynccontextmanager
-from typing import Annotated, DefaultDict
-
-from pydantic import BaseModel, Field
+from typing import Annotated
 
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response, Form
+from fastapi import Depends, FastAPI, Request, Response, Form, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
@@ -32,50 +31,8 @@ template_path = project_root / "app/templates"
 
 ##############################################################################
 
-class DeckBase(BaseModel):
-    name: str
-
-
-class Deck(DeckBase):
-    id: int | None = None
-    source: str | None = None
-    added_at: datetime = Field(default_factory=datetime.now)
-
-
-class CardBase(BaseModel):
-    name: str
-    manaCost: str | None = None
-    manaValue: float | None = None
-    power: str | None = None
-    originalText: str | None = None
-    type: str | None = None
-    types: str | None = None
-    mtgArenaId: str | None = None
-    scryfallId: str | None = None
-    availability: str | None = None
-    colors: str | None = None
-    keywords: str | None = None
-
-
-class Card(CardBase):
-    id: int | None = None
-    name: str | None = None
-
-
-class DeckCardBase(BaseModel):
-    deck_id: int
-    card_id: int
-    quantity: int
-
-
-class DeckCard(DeckCardBase):
-    id: int | None = None
-
-
-##############################################################################
-
 def get_db():
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(db_path, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -94,7 +51,6 @@ DBConnDep = Annotated[sqlite3.Connection, Depends(get_db_conn)]
 def init_db():
     conn = get_db()
     cursor = conn.cursor()
-
     try:
         with open(schema_path, "r") as f:
             cursor.executescript(f.read())
@@ -102,17 +58,6 @@ def init_db():
         conn.close()
     except Exception as e:
         print(f"Warning: Could not initialize database from schema.sql: {e}")
-
-
-##############################################################################
-
-def add_cors_middleware(fastapi_app):
-    return CORSMiddleware(
-        app=fastapi_app,
-        allow_origins=["*"],
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
 
 
 ##############################################################################
@@ -125,7 +70,14 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
-app.add_middleware(add_cors_middleware)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 templates = Jinja2Templates(directory=template_path)
 
 
@@ -147,76 +99,153 @@ async def read_item(request: Request):
     )
 
 
-@app.post("/todos", response_class=HTMLResponse)
-async def create_todo(request: Request, todo: Annotated[str, Form()]):
-    print(todo)
-
-
 @app.get("/untapped", response_class=HTMLResponse)
-async def untapped(request: Request):
+async def untapped(request: Request, conn: DBConnDep):
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, name, source, added_at FROM decks ORDER BY added_at DESC")
+    decks = [dict(row) for row in cursor.fetchall()]
+
+    for deck in decks:
+        cursor.execute("""
+            SELECT c.name, dc.quantity, c.manaCost, c.type
+            FROM deck_cards dc
+            JOIN cards c ON dc.card_id = c.id
+            WHERE dc.deck_id = ?
+            ORDER BY c.name
+        """, (deck['id'],))
+        deck['cards'] = [dict(row) for row in cursor.fetchall()]
+
     return templates.TemplateResponse(
-        request=request, name="untapped.html"
+        request=request, name="untapped.html", context={"decks": decks}
     )
 
 
 @app.post("/add/untapped-decks")
 async def add_untapped_decks_route(request: Request, conn: DBConnDep, html_doc: Annotated[str, Form(...)]):
-    # 1 parse html_doc
-    data = await parse_untapped_html(html_doc)
+    try:
+        data = await parse_untapped_html(html_doc)
 
-    # 2 fetch deck lists
-    # 3 add decks to db
-    new_decks = await add_decks_to_db(data)
+        await add_decks_to_db(conn, data)
 
-    # print(html_str)
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, name, source, added_at FROM decks ORDER BY added_at DESC")
+        decks = [dict(row) for row in cursor.fetchall()]
 
-    return templates.TemplateResponse(
-        request=request, name="untapped.html", context={"decks": []}
-    )
+        for deck in decks:
+            cursor.execute("""
+                SELECT c.name, dc.quantity, c.manaCost, c.type
+                FROM deck_cards dc
+                JOIN cards c ON dc.card_id = c.id
+                WHERE dc.deck_id = ?
+                ORDER BY c.name
+            """, (deck['id'],))
+            deck['cards'] = [dict(row) for row in cursor.fetchall()]
 
+        return templates.TemplateResponse(
+            request=request, name="untapped.html", context={"decks": decks}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error processing decks: {str(e)}")
+
+
+@app.get("/decks/{deck_id}/cards")
+async def get_deck_cards(deck_id: int, conn: DBConnDep):
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT c.name, dc.quantity, c.manaCost, c.type
+        FROM deck_cards dc
+        JOIN cards c ON dc.card_id = c.id
+        WHERE dc.deck_id = ?
+        ORDER BY c.name
+    """, (deck_id,))
+    cards = [dict(row) for row in cursor.fetchall()]
+
+    if not cards:
+        raise HTTPException(status_code=404, detail=f"No cards found for deck {deck_id}")
+
+    html = "<ul>"
+    for card in cards:
+        html += f"<li>{card['quantity']}x {card['name']} - {card.get('manaCost', '')} ({card.get('type', '')})</li>"
+    html += "</ul>"
+
+    return HTMLResponse(content=html)
+
+
+async def parse_untapped_html(html_doc: str):
+    """get cookies and deck urls"""
+    from bs4 import BeautifulSoup
+    import jsonpickle
+
+    result = {}
+    soup = BeautifulSoup(html_doc, 'html.parser')
+
+    _next_data_raw = soup.find("script", type="application/json", id="__NEXT_DATA__")
+    if not _next_data_raw:
+        raise ValueError("Could not find __NEXT_DATA__ script tag in HTML")
+
+    _next_data_dict = jsonpickle.decode(_next_data_raw.string)
+
+    _cookie_header = _next_data_dict.get("props", {}).get("cookieHeader", "")
+    if not _cookie_header:
+        raise ValueError("No cookieHeader found in __NEXT_DATA__")
+
+    _cookie_header = _cookie_header.split(";")
+    result["cookies"] = {}
+    for cookie in _cookie_header:
+        if "sessionid" in cookie:
+            result["cookies"]["session_id"] = cookie.split("=")[1].strip()
+        if "csrftoken" in cookie:
+            result["cookies"]["csrf_token"] = cookie.split("=")[1].strip()
+
+    _deck_tags = soup.find_all("a", class_="sc-bf50840f-1 ptaNk")
+    result["deck_urls"] = list(set([dt.get("href") for dt in _deck_tags if dt.get("href")]))
+
+    if not result["deck_urls"]:
+        raise ValueError("No deck URLs found in HTML")
+
+    print(f"Found {len(result['deck_urls'])} deck URLs")
+    return result
+
+
+##############################################################################
+# API
+##############################################################################
 
 async def fetch_decks(data: dict):
     import httpx
     import jsonpickle
 
-    # 2. set cookies
-    cookies = data["cookies"]
+    cookies = data.get("cookies", {})
+    if not cookies:
+        raise ValueError("No cookies provided for API requests")
+
     params = {
         "format": "json"
     }
 
-    # 1. build api urls 
     base_api_url = "https://api.mtga.untapped.gg/api/v1/decks/pricing/cardkingdom/"
 
     UntappedDeck = namedtuple("Deck", ["name", "url"])
     _api_urls = []
     for deck_url in data["deck_urls"]:
-        _api_urls.append(UntappedDeck(deck_url.split("/")[-2], base_api_url + deck_url.split("/")[-1]))
+        deck_parts = deck_url.split("/")
+        if len(deck_parts) >= 2:
+            _api_urls.append(UntappedDeck(deck_parts[-2], base_api_url + deck_parts[-1]))
 
-    # 3. fetch deck lists
-    # decks = {}
-    # async with httpx.AsyncClient() as client:
-    #     for name, url in _api_urls:
-    #         response = await client.get(url, cookies=cookies, params=params)
-    #         response.raise_for_status()
-    #         decks[name] = {
-    #             "name": name,
-    #             "url": url,
-    #             "cards": response.json()
-    #         }
-    decks = {}
+    decks = []
     async with httpx.AsyncClient(timeout=30.0) as client:
         for name, url in _api_urls:
             try:
                 response = await client.get(url, cookies=cookies, params=params)
                 response.raise_for_status()
-
-                decks[name] = {
+                deck = {
                     "name": name,
                     "url": url,
                     "cards": response.json()
                 }
-                return decks
+                decks.append(deck)
+                print(f"Fetched deck: {name}")
+                await asyncio.sleep(2)
             except httpx.HTTPStatusError as e:
                 print(f"HTTP error for {name}: {e.response.status_code}")
                 decks[name] = {"name": name, "url": url, "cards": [], "error": str(e)}
@@ -230,114 +259,59 @@ async def fetch_decks(data: dict):
     return decks
 
 
-# 
-# async def add_decks_to_db(data: dict):
-#     decks = await fetch_decks(data)
-# 
-#     conn = get_db()
-#     cursor = conn.cursor()
-# 
-#     try:
-#         for deck in decks.values():
-#             cursor.execute("INSERT INTO decks (name, source, added_at) VALUES (?, ?, ?)",
-#                            (deck["name"], "untapped", datetime.now()))
-#             deck_id = cursor.lastrowid
-#             for card in deck["cards"]:
-#                 
-#                 # TODO: logic for getting card id from card name
-#                 # cursor.execute("INSERT INTO deck_cards (deck_id, card_id, quantity) VALUES (?, ?, ?)",
-#                 #                (deck_id, card["id"], card["quantity"]))
-# 
-#         conn.commit()
-#     finally:
-#         conn.close()
-#         
-#     return decks
-
-async def add_decks_to_db(data: dict):
+async def add_decks_to_db(conn: sqlite3.Connection, data: dict):
     decks = await fetch_decks(data)
 
-    conn = get_db()
     cursor = conn.cursor()
 
-    try:
-        for deck in decks.values():
-            cursor.execute("INSERT INTO decks (name, source, added_at) VALUES (?, ?, ?)",
-                           (deck["name"], "untapped", datetime.now()))
-            deck_id = cursor.lastrowid
+    for deck in decks:
+        if deck.get("error"):
+            print(f"Skipping deck {deck['name']} due to error: {deck['error']}")
+            continue
 
-            for card in deck["cards"]:
-                unique_id = card.get("scryfallId") or card.get("mtgArenaId")
+        cursor.execute(
+            "INSERT INTO decks (name, source, added_at) VALUES (?, ?, ?)",
+            (deck["name"], "untapped", datetime.now())
+        )
+        deck_id = cursor.lastrowid
 
-                if unique_id:
-                    cursor.execute("SELECT id FROM cards WHERE scryfallId = ? OR mtgArenaId = ?",
-                                   (card.get("scryfallId"), card.get("mtgArenaId")))
-                else:
-                    cursor.execute("SELECT id FROM cards WHERE name = ? AND manaCost = ? AND type = ?",
-                                   (card["name"], card.get("manaCost"), card.get("type")))
+        for card in deck.get("cards", []):
+            unique_id = card.get("scryfallId") or card.get("mtgArenaId")
 
-                result = cursor.fetchone()
+            if unique_id:
+                cursor.execute(
+                    "SELECT id FROM cards WHERE scryfallId = ? OR mtgArenaId = ?",
+                    (card.get("scryfallId"), card.get("mtgArenaId"))
+                )
+            else:
+                cursor.execute(
+                    "SELECT id FROM cards WHERE name = ?",
+                    (card["name"],)
+                )
 
-                if result:
-                    card_id = result[0]
-                else:
-                    cursor.execute(
-                        "INSERT INTO cards (name, manaCost, manaValue, power, originalText, type, types, mtgArenaId, scryfallId, availability, colors, keywords) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                        (card["name"], card.get("manaCost"), card.get("manaValue"), card.get("power"),
-                         card.get("originalText"), card.get("type"), card.get("types"), card.get("mtgArenaId"),
-                         card.get("scryfallId"), card.get("availability"), card.get("colors"), card.get("keywords"))
-                    )
-                    card_id = cursor.lastrowid
+            result = cursor.fetchone()
 
-                cursor.execute("INSERT INTO deck_cards (deck_id, card_id, quantity) VALUES (?, ?, ?)",
-                               (deck_id, card_id, card.get("qty", 1)))
+            if result:
+                card_id = result[0]
+            else:
+                cursor.execute(
+                    """INSERT INTO cards 
+                    (name, manaCost, manaValue, power, originalText, type, types, 
+                     mtgArenaId, scryfallId, availability, colors, keywords) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (card.get("name"), card.get("manaCost"), card.get("manaValue"),
+                     card.get("power"), card.get("originalText"), card.get("type"),
+                     str(card.get("types", [])) if card.get("types") else None,
+                     card.get("mtgArenaId"), card.get("scryfallId"),
+                     str(card.get("availability", [])) if card.get("availability") else None,
+                     str(card.get("colors", [])) if card.get("colors") else None,
+                     str(card.get("keywords", [])) if card.get("keywords") else None)
+                )
+                card_id = cursor.lastrowid
 
-        conn.commit()
-    finally:
-        conn.close()
+            cursor.execute(
+                "INSERT OR IGNORE INTO deck_cards (deck_id, card_id, quantity) VALUES (?, ?, ?)",
+                (deck_id, card_id, card.get("qty", 1))
+            )
 
-
-async def parse_untapped_html(html_doc: str):
-    """get cookies and deck urls"""
-    from bs4 import BeautifulSoup
-    import jsonpickle
-    result = {}
-    soup = BeautifulSoup(html_doc, 'html.parser')
-
-    _next_data_raw = soup.find("script", type="application/json", id="__NEXT_DATA__")
-    _next_data_dict = jsonpickle.decode(_next_data_raw.string)
-
-    # get cookies for api requests
-    _cookie_header = _next_data_dict["props"]["cookieHeader"].split(";")
-    result["cookies"] = {}
-    for cookie in _cookie_header:
-        if "sessionid" in cookie:
-            result["cookies"]["session_id"] = cookie.split("=")[1]
-        if "csrftoken" in cookie:
-            result["cookies"]["csrf_token"] = cookie.split("=")[1]
-
-    # get deck urls
-    _deck_tags = soup.find_all("a", class_="sc-bf50840f-1 ptaNk")
-    result["deck_urls"] = list(set([dt.get("href") for dt in _deck_tags]))
-    print(result)
-
-    return result
-
-
-##############################################################################
-# API
-##############################################################################
-
-
-@app.get("/decks")
-def get_decks(conn: DBConnDep):
-    cursor = conn.cursor()
-    cursor.execute("SELECT id, name, added_at FROM decks")
-    return [dict(row) for row in cursor.fetchall()]
-
-
-@app.get("/cards")
-def get_cards(conn: DBConnDep):
-    cursor = conn.cursor()
-    cursor.execute("SELECT id, name FROM cards limit 100")
-    return [dict(row) for row in cursor.fetchall()]
+    conn.commit()
