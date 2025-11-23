@@ -95,8 +95,6 @@ async def add_logging_middleware(request: Request, call_next):
 
 async def fetch_decks(data: dict):
     import httpx
-    import jsonpickle
-
     cookies = data.get("cookies", {})
     if not cookies:
         raise ValueError("No cookies provided for API requests")
@@ -106,23 +104,23 @@ async def fetch_decks(data: dict):
     }
 
     base_api_url = "https://api.mtga.untapped.gg/api/v1/decks/pricing/cardkingdom/"
-
-    UntappedDeck = namedtuple("Deck", ["name", "url"])
-    _api_urls = []
+    UntappedDeck = namedtuple("Deck", ["name", "url", "api_url"])
+    untapped_decks = []
     for deck_url in data["deck_urls"]:
         deck_parts = deck_url.split("/")
         if len(deck_parts) >= 2:
-            _api_urls.append(UntappedDeck(deck_parts[-2], base_api_url + deck_parts[-1]))
+            untapped_decks.append(UntappedDeck(deck_parts[-2], deck_url, base_api_url + deck_parts[-1]))
 
     decks = []
     async with httpx.AsyncClient(timeout=30.0) as client:
-        for name, url in _api_urls:
+        for name, url, api_url in untapped_decks:
             try:
-                response = await client.get(url, cookies=cookies, params=params)
+                response = await client.get(api_url, cookies=cookies, params=params)
                 response.raise_for_status()
                 deck = {
                     "name": name,
                     "url": url,
+                    "api_url": api_url,
                     "cards": response.json()
                 }
                 decks.append(deck)
@@ -143,7 +141,6 @@ async def fetch_decks(data: dict):
 
 async def add_decks_to_db(conn: sqlite3.Connection, data: dict):
     decks = await fetch_decks(data)
-
     cursor = conn.cursor()
 
     for deck in decks:
@@ -152,8 +149,8 @@ async def add_decks_to_db(conn: sqlite3.Connection, data: dict):
             continue
 
         cursor.execute(
-            "INSERT INTO decks (name, source, added_at) VALUES (?, ?, ?)",
-            (deck["name"], "untapped", datetime.now())
+            "INSERT INTO decks (name, source, url, added_at) VALUES (?, ?, ?, ?)",
+            (deck["name"], "untapped", deck["url"], datetime.now())
         )
         deck_id = cursor.lastrowid
 
@@ -197,27 +194,53 @@ async def add_decks_to_db(conn: sqlite3.Connection, data: dict):
             )
 
     conn.commit()
-    
+
+
+def get_cards(deck_id: int, conn: DBConnDep):
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT c.name, dc.quantity, c.manaCost, c.type
+        FROM deck_cards dc
+        JOIN cards c ON dc.card_id = c.id
+        WHERE dc.deck_id = ?
+        ORDER BY c.manaCost
+    """, (deck_id,))
+    cards = [dict(row) for row in cursor.fetchall()]
+
+    if not cards:
+        raise HTTPException(status_code=404, detail=f"No cards found for deck {deck_id}")
+
+    return cards
+
+
+def get_decks(cursor):
+    cursor.execute("SELECT id, name, source, url, added_at FROM decks ORDER BY added_at DESC")
+    decks = [dict(row) for row in cursor.fetchall()]
+
+    for deck in decks:
+        cursor.execute("""
+                SELECT c.name, dc.quantity, c.manaCost, c.type
+                FROM deck_cards dc
+                JOIN cards c ON dc.card_id = c.id
+                WHERE dc.deck_id = ?
+                ORDER BY c.name
+            """, (deck['id'],))
+        deck['cards'] = [dict(row) for row in cursor.fetchall()]
+        
+    return decks
+
 
 ##############################################################################
 # Routes
 ##############################################################################
 
-@app.get("/untapped", response_class=HTMLResponse)
-async def untapped(request: Request, conn: DBConnDep):
-    cursor = conn.cursor()
-    cursor.execute("SELECT id, name, source, added_at FROM decks ORDER BY added_at DESC")
-    decks = [dict(row) for row in cursor.fetchall()]
 
+@app.get("/untapped", response_class=HTMLResponse)
+async def list_untapped(request: Request, conn: DBConnDep):
+    cursor = conn.cursor()
+    decks = get_decks(cursor)
     for deck in decks:
-        cursor.execute("""
-            SELECT c.name, dc.quantity, c.manaCost, c.type
-            FROM deck_cards dc
-            JOIN cards c ON dc.card_id = c.id
-            WHERE dc.deck_id = ?
-            ORDER BY c.name
-        """, (deck['id'],))
-        deck['cards'] = [dict(row) for row in cursor.fetchall()]
+        deck['cards'] = get_cards(deck['id'], conn)
 
     return templates.TemplateResponse(
         request=request, name="untapped.html", context={"decks": decks}
@@ -228,51 +251,14 @@ async def untapped(request: Request, conn: DBConnDep):
 async def add_untapped_decks_route(request: Request, conn: DBConnDep, html_doc: Annotated[str, Form(...)]):
     try:
         data = await parse_untapped_html(html_doc)
-
         await add_decks_to_db(conn, data)
-
         cursor = conn.cursor()
-        cursor.execute("SELECT id, name, source, added_at FROM decks ORDER BY added_at DESC")
-        decks = [dict(row) for row in cursor.fetchall()]
-
-        for deck in decks:
-            cursor.execute("""
-                SELECT c.name, dc.quantity, c.manaCost, c.type
-                FROM deck_cards dc
-                JOIN cards c ON dc.card_id = c.id
-                WHERE dc.deck_id = ?
-                ORDER BY c.name
-            """, (deck['id'],))
-            deck['cards'] = [dict(row) for row in cursor.fetchall()]
-
+        decks = get_decks(cursor)
         return templates.TemplateResponse(
             request=request, name="untapped.html", context={"decks": decks}
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing decks: {str(e)}")
-
-
-@app.get("/decks/{deck_id}/cards")
-async def get_deck_cards(deck_id: int, conn: DBConnDep):
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT c.name, dc.quantity, c.manaCost, c.type
-        FROM deck_cards dc
-        JOIN cards c ON dc.card_id = c.id
-        WHERE dc.deck_id = ?
-        ORDER BY c.name
-    """, (deck_id,))
-    cards = [dict(row) for row in cursor.fetchall()]
-
-    if not cards:
-        raise HTTPException(status_code=404, detail=f"No cards found for deck {deck_id}")
-
-    html = "<ul>"
-    for card in cards:
-        html += f"<li>{card['quantity']}x {card['name']} - {card.get('manaCost', '')} ({card.get('type', '')})</li>"
-    html += "</ul>"
-
-    return HTMLResponse(content=html)
 
 
 async def parse_untapped_html(html_doc: str):

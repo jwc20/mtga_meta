@@ -2,21 +2,45 @@
 
 {% block title %}Decks - AMD{% endblock %}
 {% block content %}
+<style >
+  form {max-width: 1000px; overflow: auto; padding:1rem}
+  textarea {max-width: 100%; min-height: 200px; overflow: auto;}
+  .decks {width: 100%; overflow: auto; display: flex; flex-wrap: wrap;}
+  .deck {width: 600px; height: 600px; overflow: auto; scrollbar-width: none; display: inline-block; font-size: 0.8rem; padding: 1rem;outline: 1px solid #ccc;margin: 1rem;border-radius: 5px;}
+</style>
 <section>
     <form hx-post="/add/untapped-decks" hx-target="body">
-        <input type="text" name="html_doc" placeholder="HTML doc text">
+        <textarea name="html_doc" placeholder="HTML doc text"></textarea>
         <button type="submit">Add Decks</button>
     </form>
 </section>
 <section>
-    <ul>
+    <div class="decks">
         {% for deck in decks %}
-        <li>
-            <h3>{{ deck.name }}</h3>
-            <button hx-get="/decks/{{ deck.id }}/cards" hx-target="#cards-{{ deck.id }}">Show Cards</button>
-            <div id="cards-{{ deck.id }}"></div>
-        </li>
+        <div class="deck">
+            <h3><a href="{{ deck.url }}">{{ deck.name }}</a></h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Card Name</th>
+                        <th>Quantity</th>
+                        <th>Mana Cost</th>
+<!--                        <th>Type</th>-->
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for card in deck.cards %}
+                    <tr>
+                        <td>{{ card.name }}</td>
+                        <td>{{ card.quantity }}</td>
+                        <td>{{ card.manaCost }}</td>
+<!--                        <td>{{ card.type }}</td>-->
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
         {% endfor %}
-    </ul>
+    </div>
 </section>
 {% endblock %}
