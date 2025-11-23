@@ -90,124 +90,6 @@ async def add_logging_middleware(request: Request, call_next):
 
 
 ##############################################################################
-# Routes
-##############################################################################
-@app.get("/", response_class=HTMLResponse)
-async def read_item(request: Request):
-    return templates.TemplateResponse(
-        request=request, name="base.html"
-    )
-
-
-@app.get("/untapped", response_class=HTMLResponse)
-async def untapped(request: Request, conn: DBConnDep):
-    cursor = conn.cursor()
-    cursor.execute("SELECT id, name, source, added_at FROM decks ORDER BY added_at DESC")
-    decks = [dict(row) for row in cursor.fetchall()]
-
-    for deck in decks:
-        cursor.execute("""
-            SELECT c.name, dc.quantity, c.manaCost, c.type
-            FROM deck_cards dc
-            JOIN cards c ON dc.card_id = c.id
-            WHERE dc.deck_id = ?
-            ORDER BY c.name
-        """, (deck['id'],))
-        deck['cards'] = [dict(row) for row in cursor.fetchall()]
-
-    return templates.TemplateResponse(
-        request=request, name="untapped.html", context={"decks": decks}
-    )
-
-
-@app.post("/add/untapped-decks")
-async def add_untapped_decks_route(request: Request, conn: DBConnDep, html_doc: Annotated[str, Form(...)]):
-    try:
-        data = await parse_untapped_html(html_doc)
-
-        await add_decks_to_db(conn, data)
-
-        cursor = conn.cursor()
-        cursor.execute("SELECT id, name, source, added_at FROM decks ORDER BY added_at DESC")
-        decks = [dict(row) for row in cursor.fetchall()]
-
-        for deck in decks:
-            cursor.execute("""
-                SELECT c.name, dc.quantity, c.manaCost, c.type
-                FROM deck_cards dc
-                JOIN cards c ON dc.card_id = c.id
-                WHERE dc.deck_id = ?
-                ORDER BY c.name
-            """, (deck['id'],))
-            deck['cards'] = [dict(row) for row in cursor.fetchall()]
-
-        return templates.TemplateResponse(
-            request=request, name="untapped.html", context={"decks": decks}
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error processing decks: {str(e)}")
-
-
-@app.get("/decks/{deck_id}/cards")
-async def get_deck_cards(deck_id: int, conn: DBConnDep):
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT c.name, dc.quantity, c.manaCost, c.type
-        FROM deck_cards dc
-        JOIN cards c ON dc.card_id = c.id
-        WHERE dc.deck_id = ?
-        ORDER BY c.name
-    """, (deck_id,))
-    cards = [dict(row) for row in cursor.fetchall()]
-
-    if not cards:
-        raise HTTPException(status_code=404, detail=f"No cards found for deck {deck_id}")
-
-    html = "<ul>"
-    for card in cards:
-        html += f"<li>{card['quantity']}x {card['name']} - {card.get('manaCost', '')} ({card.get('type', '')})</li>"
-    html += "</ul>"
-
-    return HTMLResponse(content=html)
-
-
-async def parse_untapped_html(html_doc: str):
-    """get cookies and deck urls"""
-    from bs4 import BeautifulSoup
-    import jsonpickle
-
-    result = {}
-    soup = BeautifulSoup(html_doc, 'html.parser')
-
-    _next_data_raw = soup.find("script", type="application/json", id="__NEXT_DATA__")
-    if not _next_data_raw:
-        raise ValueError("Could not find __NEXT_DATA__ script tag in HTML")
-
-    _next_data_dict = jsonpickle.decode(_next_data_raw.string)
-
-    _cookie_header = _next_data_dict.get("props", {}).get("cookieHeader", "")
-    if not _cookie_header:
-        raise ValueError("No cookieHeader found in __NEXT_DATA__")
-
-    _cookie_header = _cookie_header.split(";")
-    result["cookies"] = {}
-    for cookie in _cookie_header:
-        if "sessionid" in cookie:
-            result["cookies"]["session_id"] = cookie.split("=")[1].strip()
-        if "csrftoken" in cookie:
-            result["cookies"]["csrf_token"] = cookie.split("=")[1].strip()
-
-    _deck_tags = soup.find_all("a", class_="sc-bf50840f-1 ptaNk")
-    result["deck_urls"] = list(set([dt.get("href") for dt in _deck_tags if dt.get("href")]))
-
-    if not result["deck_urls"]:
-        raise ValueError("No deck URLs found in HTML")
-
-    print(f"Found {len(result['deck_urls'])} deck URLs")
-    return result
-
-
-##############################################################################
 # API
 ##############################################################################
 
@@ -315,3 +197,115 @@ async def add_decks_to_db(conn: sqlite3.Connection, data: dict):
             )
 
     conn.commit()
+    
+
+##############################################################################
+# Routes
+##############################################################################
+
+@app.get("/untapped", response_class=HTMLResponse)
+async def untapped(request: Request, conn: DBConnDep):
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, name, source, added_at FROM decks ORDER BY added_at DESC")
+    decks = [dict(row) for row in cursor.fetchall()]
+
+    for deck in decks:
+        cursor.execute("""
+            SELECT c.name, dc.quantity, c.manaCost, c.type
+            FROM deck_cards dc
+            JOIN cards c ON dc.card_id = c.id
+            WHERE dc.deck_id = ?
+            ORDER BY c.name
+        """, (deck['id'],))
+        deck['cards'] = [dict(row) for row in cursor.fetchall()]
+
+    return templates.TemplateResponse(
+        request=request, name="untapped.html", context={"decks": decks}
+    )
+
+
+@app.post("/add/untapped-decks")
+async def add_untapped_decks_route(request: Request, conn: DBConnDep, html_doc: Annotated[str, Form(...)]):
+    try:
+        data = await parse_untapped_html(html_doc)
+
+        await add_decks_to_db(conn, data)
+
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, name, source, added_at FROM decks ORDER BY added_at DESC")
+        decks = [dict(row) for row in cursor.fetchall()]
+
+        for deck in decks:
+            cursor.execute("""
+                SELECT c.name, dc.quantity, c.manaCost, c.type
+                FROM deck_cards dc
+                JOIN cards c ON dc.card_id = c.id
+                WHERE dc.deck_id = ?
+                ORDER BY c.name
+            """, (deck['id'],))
+            deck['cards'] = [dict(row) for row in cursor.fetchall()]
+
+        return templates.TemplateResponse(
+            request=request, name="untapped.html", context={"decks": decks}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error processing decks: {str(e)}")
+
+
+@app.get("/decks/{deck_id}/cards")
+async def get_deck_cards(deck_id: int, conn: DBConnDep):
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT c.name, dc.quantity, c.manaCost, c.type
+        FROM deck_cards dc
+        JOIN cards c ON dc.card_id = c.id
+        WHERE dc.deck_id = ?
+        ORDER BY c.name
+    """, (deck_id,))
+    cards = [dict(row) for row in cursor.fetchall()]
+
+    if not cards:
+        raise HTTPException(status_code=404, detail=f"No cards found for deck {deck_id}")
+
+    html = "<ul>"
+    for card in cards:
+        html += f"<li>{card['quantity']}x {card['name']} - {card.get('manaCost', '')} ({card.get('type', '')})</li>"
+    html += "</ul>"
+
+    return HTMLResponse(content=html)
+
+
+async def parse_untapped_html(html_doc: str):
+    """get cookies and deck urls"""
+    from bs4 import BeautifulSoup
+    import jsonpickle
+
+    result = {}
+    soup = BeautifulSoup(html_doc, 'html.parser')
+
+    _next_data_raw = soup.find("script", type="application/json", id="__NEXT_DATA__")
+    if not _next_data_raw:
+        raise ValueError("Could not find __NEXT_DATA__ script tag in HTML")
+
+    _next_data_dict = jsonpickle.decode(_next_data_raw.string)
+
+    _cookie_header = _next_data_dict.get("props", {}).get("cookieHeader", "")
+    if not _cookie_header:
+        raise ValueError("No cookieHeader found in __NEXT_DATA__")
+
+    _cookie_header = _cookie_header.split(";")
+    result["cookies"] = {}
+    for cookie in _cookie_header:
+        if "sessionid" in cookie:
+            result["cookies"]["session_id"] = cookie.split("=")[1].strip()
+        if "csrftoken" in cookie:
+            result["cookies"]["csrf_token"] = cookie.split("=")[1].strip()
+
+    _deck_tags = soup.find_all("a", class_="sc-bf50840f-1 ptaNk")
+    result["deck_urls"] = list(set([dt.get("href") for dt in _deck_tags if dt.get("href")]))
+
+    if not result["deck_urls"]:
+        raise ValueError("No deck URLs found in HTML")
+
+    print(f"Found {len(result['deck_urls'])} deck URLs")
+    return result
