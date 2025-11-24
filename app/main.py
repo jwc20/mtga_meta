@@ -13,6 +13,9 @@ from pathlib import Path
 from datetime import datetime
 import os
 
+log_line_count = 0
+last_processed_log_line_count = 0
+
 
 ##############################################################################
 
@@ -26,11 +29,14 @@ def find_project_root(marker=".git"):
 
 def get_last_log_line():
     """Read the last line from fake_seventeenlands.log"""
+    global log_line_count
     try:
         if not log_file_path.exists():
             return None
 
         with open(log_file_path, 'rb') as file:
+            log_line_count = sum(1 for _ in file)
+
             # Seek to end of file
             file.seek(0, os.SEEK_END)
             file_size = file.tell()
@@ -278,9 +284,16 @@ def get_decks(cursor):
 
 @app.get("/check-logs", response_class=HTMLResponse)
 async def analyze_deck_from_logs(request: Request, conn: DBConnDep):
+    global log_line_count, last_processed_log_line_count
     cursor = conn.cursor()
-
     last_log_entry = get_last_log_line()
+
+    # ------------------------------------------
+    # check whether any new lines were added
+    if log_line_count == last_processed_log_line_count: pass
+    last_processed_log_line_count = log_line_count
+    # ------------------------------------------
+
     arena_ids = parse_arena_ids_from_log(last_log_entry)
 
     if not arena_ids:
@@ -401,7 +414,7 @@ def fetch_current_deck_cards(cursor, arena_ids: list[str]) -> list[dict]:
 
     placeholders = ", ".join("?" * len(arena_ids))
     query = f"""
-        SELECT DISTINCT name, manaCost, type, mtgArenaId 
+        SELECT DISTINCT name, manaCost, types, mtgArenaId, scryfallId
         FROM cards 
         WHERE mtgArenaId IN ({placeholders})
     """
@@ -456,7 +469,7 @@ def find_matching_decks(cursor, current_cards: list[dict]) -> list[dict]:
 def enrich_decks_with_cards(cursor, decks: list[dict], card_count_map: dict[str, int]):
     for deck in decks:
         deck_cards_query = """
-            SELECT c.name, dc.quantity, c.manaCost, c.type, c.mtgArenaId
+            SELECT c.name, dc.quantity, c.manaCost, c.types, c.mtgArenaId, c.scryfallId
             FROM deck_cards dc
             JOIN cards c ON dc.card_id = c.id
             WHERE dc.deck_id = ?
