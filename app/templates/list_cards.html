@@ -145,6 +145,13 @@
                 <div>
                     <a style="font-size: 1rem;" href="{{ deck['url'] }}" target="_blank">{{ deck.name }}</a>
                     <span>  ({{ deck.matched_cards }} / {{ deck.total_deck_cards }})</span>
+                    
+                    <ul style="display: flex; flex-wrap: wrap; margin-top: 0.5rem; margin-left: 0; padding-left: 0;">
+                    {% for type, count in deck.type_counts.items() %}
+                        <li style="margin-right: 0.5rem;">{{ type }}: {{ count }}</li>
+                    {% endfor %}    
+                    </ul>
+                    
                     <ul class="deck-cards-list">
                         {% for card in deck.cards|sort(attribute='current_count', reverse=true) %}
                         <li class="card-hover">
