@@ -31,10 +31,11 @@ from typing import Any, Optional
 
 import dateutil.parser
 
-import seventeenlands.api_client
-import seventeenlands.logging_utils
+import api_client
+import logging_utils
 
-logger = seventeenlands.logging_utils.get_logger("17Lands")
+
+logger = logging_utils.get_logger("17Lands")
 
 
 class MockApiClient:
@@ -312,7 +313,7 @@ class Follower:
         self.host = host
         self.token = token
         self.json_decoder = json.JSONDecoder()
-        self._api_client = seventeenlands.api_client.ApiClient(host=host)
+        self._api_client = api_client.ApiClient(host=host)
         self._reinitialize()
 
     def _reinitialize(self) -> None:
@@ -1759,7 +1760,7 @@ def processing_loop(args: argparse.Namespace, token: str) -> None:
     # if running in "normal" mode...
     if (
             args.log_file is None
-            and args.host == seventeenlands.api_client.DEFAULT_HOST
+            and args.host == api_client.DEFAULT_HOST
             and follow
     ):
         # parse previous log once at startup to catch up on any missed events
@@ -1797,8 +1798,8 @@ def main() -> None:
     )
     parser.add_argument(
         "--host",
-        default=seventeenlands.api_client.DEFAULT_HOST,
-        help=f"Host to submit requests to. If not specified, will use {seventeenlands.api_client.DEFAULT_HOST}",
+        default=api_client.DEFAULT_HOST,
+        help=f"Host to submit requests to. If not specified, will use {api_client.DEFAULT_HOST}",
     )
     parser.add_argument(
         "--token",

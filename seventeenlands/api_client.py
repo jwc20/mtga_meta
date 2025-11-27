@@ -5,10 +5,10 @@ from typing import Any, Optional
 
 import requests
 
-import seventeenlands.logging_utils
-import seventeenlands.retry_utils
+import logging_utils
+import retry_utils
 
-logger = seventeenlands.logging_utils.get_logger("api_client")
+logger = logging_utils.get_logger("api_client")
 
 DEFAULT_HOST = "https://api.17lands.com"
 
@@ -46,7 +46,7 @@ class ApiClient:
             )
             return response.status_code < 500 or response.status_code >= 600
 
-        return seventeenlands.retry_utils.retry_api_call(
+        return retry_utils.retry_api_call(
             callback=_send_request,
             response_validator=_validate_response,
         )
@@ -60,7 +60,7 @@ class ApiClient:
             logger.debug(f"{response.status_code} Response: {response.text}")
             return response.status_code < 500 or response.status_code >= 600
 
-        return seventeenlands.retry_utils.retry_api_call(
+        return retry_utils.retry_api_call(
             callback=_send_request,
             response_validator=_validate_response,
         )

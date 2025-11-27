@@ -4,11 +4,11 @@ from typing import Callable, Optional, TypeVar
 
 import requests.exceptions
 
-import seventeenlands.logging_utils
+import logging_utils
 
 T = TypeVar("T")
 
-logger = seventeenlands.logging_utils.get_logger("retry_utils")
+logger = logging_utils.get_logger("retry_utils")
 
 _INITIAL_RETRY_DELAY = datetime.timedelta(seconds=1)
 _MAX_RETRY_DELAY = datetime.timedelta(minutes=10)
