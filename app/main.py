@@ -311,7 +311,7 @@ def fetch_current_deck_cards(cursor, arena_ids: list[str]) -> list[dict]:
     if not arena_ids:
         return []
     
-    distinct_arena_ids = list(set(arena_ids))
+    # distinct_arena_ids = list(set(arena_ids))
 
     placeholders = ", ".join("?" * len(arena_ids))
     query = f"""
@@ -322,7 +322,41 @@ def fetch_current_deck_cards(cursor, arena_ids: list[str]) -> list[dict]:
     cursor.execute(query, arena_ids)
 
     cards = [dict(row) for row in cursor.fetchall()]
+    
+    found_ids = list(set([card["mtgArenaId"] for card in cards]))
+    
+    missing_ids = list(set(arena_ids) - set(found_ids))
+    
+    if missing_ids:
+        missing_cards = []
+        print(f"Missing {len(missing_ids)} cards: {missing_ids}")
+        _placeholders = ", ".join("?" * len(missing_ids))
+        _query = f"""
+            SELECT DISTINCT name, CAST(id as VARCHAR(20)) as mtgArenaId from cards_from_17_lands_2
+            WHERE id IN ({_placeholders})
+        """
+        cursor.execute(_query, missing_ids)
+        missing_cards = [dict(row) for row in cursor.fetchall()]
+        
+        for card in missing_cards:
+            # search for the cards by name, get the first card and get manaCost, types, scryfallId 
+            __query = "Select name, manaCost, types, scryfallId from cards where name = ? limit 1"
+            cursor.execute(__query, (card["name"],))
+            result = cursor.fetchone()
+            if not result:
+                __query = "Select name, manaCost, types, scryfallId from cards where printedName = ? or flavorName = ? limit 1"
+                cursor.execute(__query, (card["name"], card["name"]))
+                result = cursor.fetchone()
+            
+            # if result:
+            card["name"] = result["name"]
+            card["manaCost"] = result["manaCost"]
+            card["types"] = result["types"]
+            card["scryfallId"] = result["scryfallId"]
 
+        cards.extend(missing_cards)
+    # cards.extend([dict(row) for row in cursor.fetchall()])
+    
 
     id_counts = Counter(arena_ids)
     for card in cards:

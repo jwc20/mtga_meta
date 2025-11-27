@@ -1,6 +1,6 @@
--- drop Table IF EXISTS decks;
--- drop Table IF EXISTS cards;
--- drop Table IF EXISTS deck_cards;
+drop Table IF EXISTS decks;
+drop Table IF EXISTS cards;
+drop Table IF EXISTS deck_cards;
 
 Create Table if not exists user_info (
     id INTEGER PRIMARY KEY,
@@ -22,7 +22,8 @@ CREATE TABLE IF NOT EXISTS decks (
 CREATE TABLE IF NOT EXISTS cards (
     id INTEGER PRIMARY KEY,
     name TEXT NOT NULL,
-    printed_name TEXT,
+    printedName TEXT,
+    flavorName TEXT,
     manaCost TEXT,
     manaValue REAL,
     power TEXT,
@@ -58,9 +59,11 @@ ATTACH DATABASE 'AllPrintings.sqlite' AS ap;
        
 
 -- Only insert cards if the cards table is empty
-INSERT OR IGNORE INTO cards (name, manaCost, manaValue, power, originalText, type, types, mtgArenaId, scryfallId, availability, colors, keywords)
+INSERT OR IGNORE INTO cards (name, printedName, flavorName, manaCost, manaValue, power, originalText, type, types, mtgArenaId, scryfallId, availability, colors, keywords)
 SELECT 
     c.name,
+    c.printedName,
+    c.flavorName,
     c.manaCost,
     c.manaValue,
     c.power,
@@ -73,6 +76,5 @@ SELECT
     c.colors,
     c.keywords
 FROM ap.cards c
-LEFT JOIN ap.cardIdentifiers ci ON c.uuid = ci.uuid
-WHERE c.availability LIKE '%arena%'
-AND NOT EXISTS (SELECT 1 FROM cards LIMIT 1);
+INNER JOIN ap.cardIdentifiers ci ON c.uuid = ci.uuid
+WHERE c.availability LIKE '%arena%';
