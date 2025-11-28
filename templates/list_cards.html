@@ -19,7 +19,7 @@
         z-index: 1000;
         border-radius: 4.75% / 3.5%;
         box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
-        width: 400px;
+        width: 300px;
         max-inline-size: calc(100% - 2rem);
         max-block-size: calc(100% - 2rem);
     }
@@ -135,9 +135,9 @@
         <h5>Opponent's Cards</h5>
         <ul class="cards-list">
             {% for card in cards %}
-            <li class="card-hover">
+            <li>
                 <span>({{ card.count }})</span>
-                <span>
+                <span class="card-hover">
                     {{ card.name }}
                     {% if card.scryfallId %}
                     <img class="card-image"
