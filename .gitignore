@@ -1,7 +1,10 @@
+mtg_decks.db
+identifier.sqlite
+database.db
 card_data
 
 .idea
-database.db
+_database_20251129.db
 AllPrintings.sqlite
 output_log*.txt
 Player*.log
