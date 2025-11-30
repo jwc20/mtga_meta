@@ -60,7 +60,7 @@ def calculate_mana_cost_value(mana_cost: str) -> tuple[int, str]:
 
     return value, mana_tags.strip()
 
-async def fetch_missing_cards_from_17lands(ids: list[str]) -> list[dict] | None:
+async def fetch_missing_cards_from_17lands(ids: list[str]) -> tuple[list[dict], list[str]] | None:
     import httpx
     
     missing_ids_str = ",".join(ids)
@@ -72,7 +72,8 @@ async def fetch_missing_cards_from_17lands(ids: list[str]) -> list[dict] | None:
             response.raise_for_status()
             response_json = response.json()
             cards = response_json.get("cards", [])
-            return cards
+            found_ids = [str(c["id"]) for c in cards]
+            return cards, found_ids
         except httpx.HTTPStatusError as e:
             print(f"HTTP error {e.response.status_code}")
         except httpx.RequestError as e:

@@ -48,6 +48,16 @@ async def check_logs_stream(request: Request):
 
                     if arena_ids:
                         current_deck_cards, missing_ids = fetch_current_deck_cards(cursor, arena_ids)
+
+                        # handle cards with missing ids
+                        print(f"Missing {len(missing_ids)} cards: {missing_ids}")
+                        if missing_ids:
+                            found_cards, found_ids = await fetch_missing_cards_from_17lands(missing_ids)
+                            missing_ids = list(set(missing_ids) - set(found_ids))
+                            if found_cards:
+                                await update_current_deck_cards(conn, found_cards)
+                                
+                                
                         card_count_by_name = build_card_count_map(arena_ids, current_deck_cards)
                         matching_decks = find_matching_decks(cursor, current_deck_cards)
                         enrich_decks_with_cards(cursor, matching_decks, card_count_by_name)
@@ -77,17 +87,13 @@ async def check_logs_stream(request: Request):
                     enrich_decks_with_playability(matching_decks, opponent_mana)
                     
                     
-                    # handle cards with missing ids
-                    print(f"Missing {len(missing_ids)} cards: {missing_ids}")
-                    if missing_ids:
-                        found_cards = await fetch_missing_cards_from_17lands(missing_ids)
-                        if found_cards:
-                            await update_current_deck_cards(conn, found_cards)
+
 
                     html_content = templates.get_template("list_cards.html").render(
                         cards=current_deck_cards,
                         matching_decks=matching_decks,
                         opponent_mana=opponent_mana,
+                        missing_ids=missing_ids
                     )
 
                     yield {

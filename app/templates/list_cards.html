@@ -1,4 +1,8 @@
 <style>
+    .missing-cards {
+        margin-top: 0.5rem;
+    }
+    
     .ms-cost {
         line-height: 0.2rem;
     }
@@ -185,11 +189,11 @@
                 </ul>
             </div>
         {% endfor %}
-{#        {% if missing_ids %}#}
-{#            <div class="missing-cards">#}
-{#                <span>Missing Cards: {{ missing_ids }}</span>#}
-{#            </div>#}
-{#        {% endif %}#}
+        {% if missing_ids %}
+            <div class="missing-cards">
+                <span>Missing Cards: {{ missing_ids }}</span>
+            </div>
+        {% endif %}
     </section>
 
     <section>
@@ -211,8 +215,9 @@
                                     {% for card in type_cards|sort(attribute='mana_cost_value', reverse=true) %}
                                         {% set is_played = card.current_count is defined and card.current_count > 0 %}
                                         <li>
-                                            <span>({{ card.current_count }} /</span>
-                                            <span>{{ card.quantity }})</span>
+{#                                            <span>({{ card.current_count }} /</span>#}
+{#                                            <span>{{ card.quantity }})</span>#}
+                                            <span>{{ card.quantity }}</span>
                                             <span class="card-hover{% if card.is_playable %} card-playable{% endif %}{% if is_played %} card-played{% endif %}">
                                                 {{ card.name }}
                                                 {% if card.id %}
