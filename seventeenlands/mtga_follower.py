@@ -904,11 +904,13 @@ class Follower:
                             
                             # print(self.opponent_actions)
                             # print(f"length: {len(self.opponent_actions)}")
-                            logger.info(f"::Opponent (Player {opponent_seat_id})::actions: {self.opponent_actions}")
+                            # logger.info(f"::Opponent (Player {opponent_seat_id})::actions: {self.opponent_actions}")
                         
                         if previous_opponent_actions != self.opponent_actions:
                             print("opponent actions changed")
-                            print(self.opponent_actions)
+                            # print(self.opponent_actions)
+                            logger.info(f"::Opponent (Player {opponent_seat_id})::actions: {self.opponent_actions}")
+
                         
                     if zone["type"] == "ZoneType_Hand":
                         owner = zone["ownerSeatId"]

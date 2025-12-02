@@ -52,10 +52,8 @@ async def check_logs_stream(request: Request):
 
                 # print(log_entry.current_line, log_entry.current_line_number, log_entry.log_line_count,
                 #       log_entry.last_processed_log_line_count)
-                
 
-                    
-                if log_entry.current_line_number != log_line_count:
+                if log_line_count != last_processed_log_line_count:
                     await set_last_processed_count(log_line_count)
          
 
