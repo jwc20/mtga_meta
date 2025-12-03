@@ -348,6 +348,7 @@ class Follower:
             dict
         )
         self.opponent_actions: list[Any] = []
+        self.game_object_annotations: list[Any] = []
         self.cards_in_hand: defaultdict[Any, list[Any]] = defaultdict(list)
         self.user_screen_name: Optional[str] = None
         self.full_screen_name: Optional[str] = None
@@ -839,7 +840,9 @@ class Follower:
                 else:
                     turns_sum = sum(p.get("turnNumber", 0) for p in players)
                     self.turn_count = max(self.turn_count, turns_sum)
-
+                
+                
+                # game objects
                 for game_object in game_state_message.get("gameObjects", []):
                     if game_object["type"] not in (
                             "GameObjectType_Card",
@@ -862,6 +865,7 @@ class Follower:
                         if self.seat_id and owner != self.seat_id:
                             # print(f"opponent: {instance_id} {card_id}")
                             logger.info(f"::Opponent (Player {owner})::cards: {current_cards}")
+                            print(list(self.objects_by_owner[owner].items()))
                         # else:
                         #     print(f"player: {instance_id}")
                         #     print(f"::Player (Player {owner})::cards: {current_cards}")
@@ -872,11 +876,14 @@ class Follower:
                     #     c for c in self.objects_by_owner.get(opponent_id, {}).values()
                     # ]
 
+                
+                # actions
                 actions = game_state_message.get("actions", [])
                 for zone in game_state_message.get("zones", []):
                     player_seat_id =self.seat_id
                     opponent_seat_id = 2 if player_seat_id == 1 else 1
                     
+                    # to see what cards are on the battlfield
                     if zone["type"] == "ZoneType_Battlefield":
                         # print(zone)
                         object_instance_ids = zone.get("objectInstanceIds", [])
@@ -911,7 +918,7 @@ class Follower:
                             self.opponent_actions = sorted(self.opponent_actions, key=itemgetter("instanceId"))
                             logger.info(f"::Opponent (Player {opponent_seat_id})::actions: {self.opponent_actions}")
 
-                        
+                    # to see what cards are in the player's hand
                     if zone["type"] == "ZoneType_Hand":
                         owner = zone["ownerSeatId"]
                         player_objects = self.objects_by_owner[owner]
@@ -928,6 +935,35 @@ class Follower:
                                     card_id
                                 )
                                 # print(f"player's drawn cards: {self.drawn_cards_by_instance_id}")
+                                
+                
+                # annotations
+                previous_game_object_annotations = self.game_object_annotations.copy()
+                for annotation in game_state_message.get("annotations", []):
+                    if "AnnotationType_ChoiceResult" in annotation["type"] or "AnnotationType_ColorProduction" in \
+                            annotation["type"]:
+                        affector_id = annotation.get("affectorId")
+                        # choice_value = annotation.get("details").get("Choice_Value")
+                        _details = annotation.get("details")
+
+                        for detail in _details:
+                            if detail.get("key") == "Choice_Value" or detail.get("key") == "colors":
+                                color_values = detail.get("valueInt32")
+                                # 1 = White
+                                # 2 = Blue
+                                # 4 = Black
+                                # 8 = Red
+                                # 16 = Green
+
+                                self.game_object_annotations.append({
+                                    "affectorId": affector_id,
+                                    "values": color_values
+                                })
+                if previous_game_object_annotations != self.game_object_annotations:
+                    logger.info(f"::annotations:: {self.game_object_annotations}")
+                            
+                        
+                        
                          
 
                 players_deciding_hand = {

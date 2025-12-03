@@ -8,8 +8,9 @@ last_processed_log_line_count = 0
 
 class LogEntry:
     def __init__(self):
-        self.arena_ids = None
-        self.actions_dict = None
+        self.annotations_log = None
+        self.cards_log = None
+        self.actions_log = None
         self.file_handle = None
 
         if self.file_handle is None and log_file_path.exists():
@@ -36,8 +37,8 @@ class LogEntry:
 
             if "cards" in log_line:
                 arena_ids_str = cards_section[1].strip("[]")
-                self.arena_ids = [id.strip() for id in arena_ids_str.split(", ") if id.strip()]
-                return self.arena_ids
+                self.cards_log = [id.strip() for id in arena_ids_str.split(", ") if id.strip()]
+                return self.cards_log
 
         except (IndexError, AttributeError):
             return []
@@ -51,8 +52,21 @@ class LogEntry:
             actions_section = log_segments[2]
             if "actions" in log_line:
                 actions_str = actions_section.split("actions: ")[1]
-                self.actions_dict = jsonpickle.decode(actions_str)
-                return self.actions_dict
+                self.actions_log = jsonpickle.decode(actions_str)
+                return self.actions_log
+        except (IndexError, AttributeError):
+            return []
+        
+    def parse_annotations_log_line(self, log_line):
+        import jsonpickle
+        try:
+            log_segments = log_line.split("::")
+            if len(log_segments) < 3:
+                return []
+            annotations_str = log_segments[2].strip()
+            if "annotations" in log_line:
+                self.annotations_log = jsonpickle.decode(annotations_str)
+                return self.annotations_log
         except (IndexError, AttributeError):
             return []
 
