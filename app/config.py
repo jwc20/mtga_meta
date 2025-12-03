@@ -19,21 +19,18 @@ def find_project_root(marker=".git"):
     return current.parent
 
 
-log_file_path = Path(os.path.expanduser("~")) / ".seventeenlands" / "fake_seventeenlands.log"
+seventeenlands_log_file_path = Path(os.path.expanduser("~")) / ".seventeenlands" / "fake_seventeenlands.log"
 
 project_root = find_project_root()
 db_path = project_root / "database.db"
 schema_path = project_root / "schema.sql"
 template_path = project_root / "app/templates"
-
-config_file_path = project_root / "config.yaml"
-
-LOG_DIR = log_file_path / "logs"
+logger_path = project_root / "logs"
 
 
 class DailyFileHandler(logging.FileHandler):
-    def __init__(self, log_dir: str = "logs", prefix: str = "app", encoding: str = "utf-8"):
-        self.log_dir = Path(log_dir)
+    def __init__(self, log_dir: Path = logger_path, prefix: str = "app", encoding: str = "utf-8"):
+        self.log_dir = log_dir
         self.prefix = prefix
         self.current_date = None
         self.log_dir.mkdir(parents=True, exist_ok=True)

@@ -9,7 +9,7 @@ MULTI_WORD_SUB_TYPES: Set[str] = {"Time Lord"}
 SUPER_TYPES: Set[str] = {"Basic", "Host", "Legendary", "Ongoing", "Snow", "World"}
 
 
-def parse_card_types(card_type: str) -> Tuple[List[str], str, List[str]]:
+async def parse_card_types(card_type: str) -> Tuple[List[str], str, List[str]]:
     if not card_type:
         return [], "", []
     sub_types: List[str] = []
@@ -49,7 +49,7 @@ def parse_card_types(card_type: str) -> Tuple[List[str], str, List[str]]:
     return super_types, " ".join(types), sub_types
 
 
-def calculate_mana_cost_value(mana_cost: str) -> tuple[int, str]:
+async def calculate_mana_cost_value(mana_cost: str) -> tuple[int, str]:
     value = 0
     mana_tags = ""
     if not mana_cost:

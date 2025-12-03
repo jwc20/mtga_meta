@@ -34,17 +34,17 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-def parse_log_entry(log_entry: LogEntry, last_log_entry: str) -> None:
+async def parse_log_entry(log_entry: LogEntry, last_log_entry: str) -> None:
     if "cards" in last_log_entry:
-        log_entry.parse_cards_log_line(last_log_entry)
+        await log_entry.parse_cards_log_line(last_log_entry)
     elif "actions" in last_log_entry:
-        log_entry.parse_actions_log_line(last_log_entry)
+        await log_entry.parse_actions_log_line(last_log_entry)
     elif "annotations" in last_log_entry:
-        log_entry.parse_annotations_log_line(last_log_entry)
+        await log_entry.parse_annotations_log_line(last_log_entry)
 
 
 async def process_missing_cards(conn, cursor, arena_ids: list[str]) -> tuple[list[dict], list[str]]:
-    current_deck_cards, missing_ids = fetch_current_deck_cards(cursor, arena_ids)
+    current_deck_cards, missing_ids = await fetch_current_deck_cards(cursor, arena_ids)
 
     if not missing_ids:
         return current_deck_cards, missing_ids
@@ -110,7 +110,7 @@ def build_mana_tags(mana_pool: ManaPool) -> list[tuple[str, int]]:
     return tags
 
 
-def render_log_update_html(
+async def render_log_update_html(
         current_deck_cards: list[dict],
         matching_decks: list[dict],
         opponent_mana_tags: list[tuple[str, int]],
@@ -131,9 +131,9 @@ async def process_cards(conn, cursor, state: LogState) -> tuple[list[dict], list
 
     logger.debug("Processing current deck cards")
     current_deck_cards, missing_ids = await process_missing_cards(conn, cursor, state.cards_log)
-    card_count_by_name = build_card_count_map(state.cards_log, current_deck_cards)
+    card_count_by_name = await build_card_count_map(state.cards_log, current_deck_cards)
     matching_decks = find_matching_decks(cursor, current_deck_cards)
-    enrich_decks_with_cards(cursor, matching_decks, card_count_by_name)
+    await enrich_decks_with_cards(cursor, matching_decks, card_count_by_name)
     compute_deck_type_counts(matching_decks)
 
     return current_deck_cards, matching_decks, missing_ids
@@ -195,16 +195,16 @@ async def check_logs_stream(request: Request):
                     await asyncio.sleep(0.5)
                     continue
 
-                parse_log_entry(log_entry, last_log_entry)
+                await parse_log_entry(log_entry, last_log_entry)
 
-                state = log_entry.get_current_state()
+                state = await log_entry.get_current_state()
                 result = await process_log_update(conn, cursor, state)
 
                 if result is None:
                     await asyncio.sleep(0.5)
                     continue
 
-                html_content = render_log_update_html(
+                html_content = await render_log_update_html(
                     result["current_deck_cards"],
                     result["matching_decks"],
                     result["opponent_mana_tags"],

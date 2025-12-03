@@ -4,7 +4,7 @@ from collections import Counter, namedtuple
 from app.utils.cards import parse_card_types, calculate_mana_cost_value
 
 
-def fetch_current_deck_cards(cursor: sqlite3.Cursor, arena_ids: list[str]) -> tuple[list[dict], list[str]]:
+async def fetch_current_deck_cards(cursor: sqlite3.Cursor, arena_ids: list[str]) -> tuple[list[dict], list[str]]:
     if not arena_ids:
         return [], []
 
@@ -60,13 +60,12 @@ def fetch_current_deck_cards(cursor: sqlite3.Cursor, arena_ids: list[str]) -> tu
     id_counts = Counter(arena_ids)
     for card in cards:
         card["count"] = id_counts.get(card["arena_id"], 0)
-        card['super_types'], card['types'], card['sub_types'] = parse_card_types(card['type_line'])
-        card['mana_cost_value'], card['mana_cost_tags'] = calculate_mana_cost_value(card['mana_cost'])
+        card['super_types'], card['types'], card['sub_types'] = await parse_card_types(card['type_line'])
+        card['mana_cost_value'], card['mana_cost_tags'] = await calculate_mana_cost_value(card['mana_cost'])
 
     return cards, missing_ids
 
-
-def build_card_count_map(arena_ids: list[str], cards: list[dict]) -> dict[str, int]:
+async def build_card_count_map(arena_ids: list[str], cards: list[dict]) -> dict[str, int]:
     id_counts = Counter(arena_ids)
     card_count_map = {}
 
@@ -124,7 +123,7 @@ def find_matching_decks(cursor: sqlite3.Cursor, current_cards: list[dict]) -> li
     return cards
 
 
-def enrich_decks_with_cards(cursor: sqlite3.Cursor, decks: list[dict], card_count_map: dict[str, int]) -> None:
+async def enrich_decks_with_cards(cursor: sqlite3.Cursor, decks: list[dict], card_count_map: dict[str, int]) -> None:
     for deck in decks:
         deck_cards_query = """
             SELECT c.name, dc.quantity, c.mana_cost, c.type_line, c.arena_id, c.id, c.component
@@ -151,10 +150,10 @@ def enrich_decks_with_cards(cursor: sqlite3.Cursor, decks: list[dict], card_coun
             deck['cards'] = [card for card in deck['cards'] if card['component'] != "combo_piece"]
 
         for card in deck['cards']:
-            card['mana_cost_value'], card['mana_cost_tags'] = calculate_mana_cost_value(card['mana_cost'])
+            card['mana_cost_value'], card['mana_cost_tags'] = await calculate_mana_cost_value(card['mana_cost'])
 
         for card in deck['cards']:
-            card['super_types'], card['types'], card['sub_types'] = parse_card_types(card['type_line'])
+            card['super_types'], card['types'], card['sub_types'] = await parse_card_types(card['type_line'])
 
         for card in deck['cards']:
             card['current_count'] = card_count_map.get(card['name'], 0)

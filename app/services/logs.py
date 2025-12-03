@@ -1,7 +1,7 @@
 import os
 from dataclasses import dataclass, field
 
-from app.config import log_file_path
+from app.config import seventeenlands_log_file_path
 
 log_line_count = 0
 last_processed_log_line_count = 0
@@ -36,8 +36,8 @@ class LogEntry:
         self._annotations_log: list[dict] | None = None
         self.file_handle = None
 
-        if self.file_handle is None and log_file_path.exists():
-            self.file_handle = open(log_file_path, 'rb')
+        if self.file_handle is None and seventeenlands_log_file_path.exists():
+            self.file_handle = open(seventeenlands_log_file_path, 'rb')
             self.file_handle.seek(0, os.SEEK_END)
 
         if self.file_handle:
@@ -60,7 +60,7 @@ class LogEntry:
     def annotations_log(self) -> list[dict] | None:
         return self._annotations_log
 
-    def get_current_state(self) -> LogState:
+    async def get_current_state(self) -> LogState:
         return LogState(
             cards_log=self._cards_log or [],
             actions_log=self._actions_log or [],
@@ -81,7 +81,7 @@ class LogEntry:
     def reset_annotations(self) -> None:
         self._annotations_log = None
 
-    def parse_cards_log_line(self, log_line: str) -> list[str]:
+    async def parse_cards_log_line(self, log_line: str) -> list[str]:
         try:
             log_segments = log_line.split("::")
             if len(log_segments) < 3:
@@ -100,7 +100,7 @@ class LogEntry:
         except (IndexError, AttributeError):
             return []
 
-    def parse_actions_log_line(self, log_line: str) -> list[dict]:
+    async def parse_actions_log_line(self, log_line: str) -> list[dict]:
         import jsonpickle
         try:
             log_segments = log_line.split("::")
@@ -117,7 +117,7 @@ class LogEntry:
         except (IndexError, AttributeError):
             return []
 
-    def parse_annotations_log_line(self, log_line: str) -> list[dict]:
+    async def parse_annotations_log_line(self, log_line: str) -> list[dict]:
         import jsonpickle
         try:
             log_segments = log_line.split("::")
@@ -134,13 +134,15 @@ class LogEntry:
             return []
 
 
+############################################################################
+
 async def get_last_log_line() -> str | None:
     global log_line_count
     try:
-        if not log_file_path.exists():
+        if not seventeenlands_log_file_path.exists():
             return None
 
-        with open(log_file_path, 'rb') as file:
+        with open(seventeenlands_log_file_path, 'rb') as file:
             log_line_count = sum(1 for _ in file)
 
             file.seek(0, os.SEEK_END)
