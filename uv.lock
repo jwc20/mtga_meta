@@ -936,6 +936,7 @@ dependencies = [
     { name = "pandas" },
     { name = "pprintpp" },
     { name = "python-dateutil" },
+    { name = "python-json-logger" },
     { name = "requests" },
     { name = "sse-starlette" },
 ]
@@ -952,6 +953,7 @@ requires-dist = [
     { name = "pandas", specifier = ">=2.3.3" },
     { name = "pprintpp", specifier = ">=0.4.0" },
     { name = "python-dateutil", specifier = ">=2.9.0.post0" },
+    { name = "python-json-logger", specifier = ">=4.0.0" },
     { name = "requests", specifier = ">=2.32.5" },
     { name = "sse-starlette", specifier = ">=3.0.3" },
 ]

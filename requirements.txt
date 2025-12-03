@@ -258,7 +258,9 @@ python-dateutil==2.9.0.post0
 python-dotenv==1.2.1
     # via uvicorn
 python-json-logger==4.0.0
-    # via jupyter-events
+    # via
+    #   mtga-meta (pyproject.toml)
+    #   jupyter-events
 python-multipart==0.0.20
     # via fastapi
 pytz==2025.2
