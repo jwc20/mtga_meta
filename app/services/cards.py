@@ -1,10 +1,10 @@
-import sqlite3
+import aiosqlite
 from collections import Counter, namedtuple
 
 from app.utils.cards import parse_card_types, calculate_mana_cost_value
 
 
-async def fetch_current_deck_cards(cursor: sqlite3.Cursor, arena_ids: list[str]) -> tuple[list[dict], list[str]]:
+async def fetch_current_deck_cards(cursor: aiosqlite.Cursor, arena_ids: list[str]) -> tuple[list[dict], list[str]]:
     if not arena_ids:
         return [], []
 
@@ -14,9 +14,9 @@ async def fetch_current_deck_cards(cursor: sqlite3.Cursor, arena_ids: list[str])
         FROM scryfall_all_cards 
         WHERE arena_id IN ({placeholders})
     """
-    cursor.execute(query, arena_ids)
+    await cursor.execute(query, arena_ids)
 
-    cards = [dict(row) for row in cursor.fetchall()]
+    cards = [dict(row) for row in await cursor.fetchall()]
 
     found_ids = list(set([card["arena_id"] for card in cards]))
 
@@ -28,17 +28,17 @@ async def fetch_current_deck_cards(cursor: sqlite3.Cursor, arena_ids: list[str])
             SELECT DISTINCT name, CAST(id as VARCHAR(20)) as arena_id FROM '17lands'
             WHERE id IN ({_placeholders})
         """
-        cursor.execute(_query, missing_ids)
-        missing_cards = [dict(row) for row in cursor.fetchall()]
+        await cursor.execute(_query, missing_ids)
+        missing_cards = [dict(row) for row in await cursor.fetchall()]
 
         for card in missing_cards:
             __query = "SELECT name, mana_cost, type_line, arena_id, id, printed_name, flavor_name, produced_mana FROM scryfall_all_cards WHERE name = ? LIMIT 1"
-            cursor.execute(__query, (card["name"],))
-            result = cursor.fetchone()
+            await cursor.execute(__query, (card["name"],))
+            result = await cursor.fetchone()
             if not result:
                 __query = "SELECT name, mana_cost, type_line, arena_id, id, printed_name, flavor_name, produced_mana FROM scryfall_all_cards WHERE printed_name = ? OR flavor_name = ? LIMIT 1"
-                cursor.execute(__query, (card["name"], card["name"]))
-                result = cursor.fetchone()
+                await cursor.execute(__query, (card["name"], card["name"]))
+                result = await cursor.fetchone()
 
             if result:
                 card["name"] = result["name"]
@@ -75,7 +75,7 @@ async def build_card_count_map(arena_ids: list[str], cards: list[dict]) -> dict[
     return card_count_map
 
 
-def find_matching_decks(cursor: sqlite3.Cursor, current_cards: list[dict]) -> list[dict]:
+async def find_matching_decks(cursor: aiosqlite.Cursor, current_cards: list[dict]) -> list[dict]:
     if not current_cards:
         return []
 
@@ -98,8 +98,8 @@ def find_matching_decks(cursor: sqlite3.Cursor, current_cards: list[dict]) -> li
         ORDER BY matched_cards DESC
         limit 3
     """
-    cursor.execute(query_2, unique_card_names)
-    cards = [dict(row) for row in cursor.fetchall()]
+    await cursor.execute(query_2, unique_card_names)
+    cards = [dict(row) for row in await cursor.fetchall()]
 
     if len(cards) < 3:
         query_2 = f"""
@@ -117,13 +117,13 @@ def find_matching_decks(cursor: sqlite3.Cursor, current_cards: list[dict]) -> li
         ORDER BY matched_cards DESC
         limit 3
         """
-        cursor.execute(query_2, unique_card_names)
-        cards.extend([dict(row) for row in cursor.fetchall()])
+        await cursor.execute(query_2, unique_card_names)
+        cards.extend([dict(row) for row in await cursor.fetchall()])
 
     return cards
 
 
-async def enrich_decks_with_cards(cursor: sqlite3.Cursor, decks: list[dict], card_count_map: dict[str, int]) -> None:
+async def enrich_decks_with_cards(cursor: aiosqlite.Cursor, decks: list[dict], card_count_map: dict[str, int]) -> None:
     for deck in decks:
         deck_cards_query = """
             SELECT c.name, dc.quantity, c.mana_cost, c.type_line, c.arena_id, c.id, c.component
@@ -132,8 +132,8 @@ async def enrich_decks_with_cards(cursor: sqlite3.Cursor, decks: list[dict], car
             WHERE dc.deck_id = ?
             ORDER BY c.name
         """
-        cursor.execute(deck_cards_query, (deck['id'],))
-        deck['cards'] = [dict(row) for row in cursor.fetchall()]
+        await cursor.execute(deck_cards_query, (deck['id'],))
+        deck['cards'] = [dict(row) for row in await cursor.fetchall()]
         deck['cards'] = [card for card in deck['cards'] if card['component'] != "combo_piece"]
 
         if len(deck["cards"]) == 0:
@@ -145,8 +145,8 @@ async def enrich_decks_with_cards(cursor: sqlite3.Cursor, decks: list[dict], car
                 GROUP BY c.name
                 ORDER BY c.name
             """
-            cursor.execute(deck_cards_query, (deck['id'],))
-            deck['cards'] = [dict(row) for row in cursor.fetchall()]
+            await cursor.execute(deck_cards_query, (deck['id'],))
+            deck['cards'] = [dict(row) for row in await cursor.fetchall()]
             deck['cards'] = [card for card in deck['cards'] if card['component'] != "combo_piece"]
 
         for card in deck['cards']:
@@ -161,9 +161,9 @@ async def enrich_decks_with_cards(cursor: sqlite3.Cursor, decks: list[dict], car
             
             
             
-async def update_current_deck_cards(conn: sqlite3.Connection, cards: list[dict]) -> None:
+async def update_current_deck_cards(conn: aiosqlite.Connection, cards: list[dict]) -> None:
     import re
-    cursor = conn.cursor()
+    cursor = await conn.cursor()
     cards_to_update = []
     for card in cards:
         match = re.search(r'/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\.', card["image_url"])
@@ -181,10 +181,10 @@ async def update_current_deck_cards(conn: sqlite3.Connection, cards: list[dict])
     
     # search by scryfall_id and update arena_id
     for card in cards_to_update:
-        cursor.execute("SELECT name, arena_id FROM scryfall_all_cards WHERE id = ?", (card['scryfall_id'],))
-        result = cursor.fetchone()
+        await cursor.execute("SELECT name, arena_id FROM scryfall_all_cards WHERE id = ?", (card['scryfall_id'],))
+        result = await cursor.fetchone()
         if result and result['arena_id'] != card['arena_id']:
             print(f"Update card {result['name']} with arena_id {card['arena_id']} and scryfall_id {card['scryfall_id']}")
-            cursor.execute("UPDATE scryfall_all_cards SET arena_id = ? WHERE id = ?", (card['arena_id'], card['scryfall_id']))
-    conn.commit()
+            await cursor.execute("UPDATE scryfall_all_cards SET arena_id = ? WHERE id = ?", (card['arena_id'], card['scryfall_id']))
+    await conn.commit()
         

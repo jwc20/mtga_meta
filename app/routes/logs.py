@@ -1,4 +1,5 @@
 import asyncio
+import aiosqlite
 import logging
 from collections import defaultdict
 
@@ -132,7 +133,7 @@ async def process_cards(conn, cursor, state: LogState) -> tuple[list[dict], list
     logger.debug("Processing current deck cards")
     current_deck_cards, missing_ids = await process_missing_cards(conn, cursor, state.cards_log)
     card_count_by_name = await build_card_count_map(state.cards_log, current_deck_cards)
-    matching_decks = find_matching_decks(cursor, current_deck_cards)
+    matching_decks = await find_matching_decks(cursor, current_deck_cards)
     await enrich_decks_with_cards(cursor, matching_decks, card_count_by_name)
     compute_deck_type_counts(matching_decks)
 
@@ -168,11 +169,11 @@ def is_relevant_log_entry(log_entry: str) -> bool:
 
 @router.get("/check-logs")
 async def check_logs_stream(request: Request):
-    conn = get_db()
+    conn = await get_db()
 
     async def event_generator():
         logger.info("SSE stream started")
-        cursor = conn.cursor()
+        cursor = await conn.cursor()
         log_entry = LogEntry()
 
         try:
@@ -220,9 +221,9 @@ async def check_logs_stream(request: Request):
                 )
                 yield {"event": "log-update", "data": html_content}
 
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(0.1)
         finally:
             logger.info("SSE stream closed")
-            conn.close()
+            await conn.close()
 
     return EventSourceResponse(event_generator())

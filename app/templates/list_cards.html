@@ -120,10 +120,6 @@
         width: 5rem;
     }
 
-    .deck-cards-list li > span:nth-child(2) {
-        width: 3rem;
-    }
-
     .deck-cards-list li > span:nth-child(3) {
         flex-grow: 1;
     }
@@ -185,11 +181,11 @@
         <h5>Opponent's Cards</h5>
         {% set cards_with_types = cards|selectattr('types')|list %}
         {% for type, type_cards in cards_with_types|groupby('types') %}
-            <div class="type-group">
-                <div class="type-header">{{ type|title }}</div>
-                <ul class="cards-list">
-                    {% for card in type_cards|sort(attribute='name') %}
-                        <li>
+        <div class="type-group">
+            <div class="type-header">{{ type|title }}</div>
+            <ul class="cards-list">
+                {% for card in type_cards|sort(attribute='name') %}
+                <li>
                             <span class="card-hover">
                                 {% if card.printed_name %}
                                     {{ card.printed_name }}
@@ -202,38 +198,38 @@
                                          alt="{{ card.name }}">
                                 {% endif %}
                             </span>
-                            <div class="mana-cost">
-                                {{ card.mana_cost_tags | safe }}
-                            </div>
+                    <div class="mana-cost">
+                        {{ card.mana_cost_tags | safe }}
+                    </div>
 
-                        </li>
-                    {% endfor %}
-                </ul>
-            </div>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
         {% endfor %}
         {% if missing_ids %}
-            <div class="missing-cards">
-                <span>Missing Cards: {{ missing_ids }}</span>
-            </div>
+        <div class="missing-cards">
+            <span>Missing Cards: {{ missing_ids }}</span>
+        </div>
         {% endif %}
         <div>
             <div class="mana-pool">
                 <table class="mana-table">
                     {% if opponent_mana %}
-                        <thead>
-                        <tr>
-                            {% for color, count in opponent_mana %}
-                                <th>{{ color | safe }}</th>
-                            {% endfor %}
-                        </tr>
-                        </thead>
-                        <tbody>
-                        <tr>
-                            {% for color, count in opponent_mana %}
-                                <td>{{ count }}</td>
-                            {% endfor %}
-                        </tr>
-                        </tbody>
+                    <thead>
+                    <tr>
+                        {% for color, count in opponent_mana %}
+                        <th>{{ color | safe }}</th>
+                        {% endfor %}
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr>
+                        {% for color, count in opponent_mana %}
+                        <td>{{ count }}</td>
+                        {% endfor %}
+                    </tr>
+                    </tbody>
                     {% endif %}
 
                 </table>
@@ -244,24 +240,21 @@
         <div class="meta-decks">
             <div class="grid">
                 {% for deck in matching_decks %}
+                <div>
                     <div>
-                        <div>
-                            <a class="deck-name" href="{{ deck['url'] }}" target="_blank">{{ deck.name }}</a>
-                            <span>  ({{ deck.matched_cards }} / {{ deck.total_deck_cards }})</span>
-                        </div>
+                        <a class="deck-name" href="{{ deck['url'] }}" target="_blank">{{ deck.name }}</a>
+                        <span>  ({{ deck.matched_cards }} / {{ deck.total_deck_cards }})</span>
+                    </div>
 
-                        {% set cards_with_types = deck.cards|selectattr('types')|list %}
+                    {% set cards_with_types = deck.cards|selectattr('types')|list %}
 
-                        {% for type, type_cards in cards_with_types|groupby('types') %}
-                            <div class="type-group">
-                                <div class="type-header">{{ type }}</div>
-                                <ul class="deck-cards-list">
-                                    {% for card in type_cards|sort(attribute='mana_cost_value', reverse=true) %}
-                                        {% set is_played = card.current_count is defined and card.current_count > 0 %}
-                                        <li>
-                                            {#                                            <span>({{ card.current_count }} /</span>#}
-                                            {#                                            <span>{{ card.quantity }})</span>#}
-                                            <span>{{ card.quantity }}</span>
+                    {% for type, type_cards in cards_with_types|groupby('types') %}
+                    <div class="type-group">
+                        <div class="type-header">{{ type }}</div>
+                        <ul class="deck-cards-list">
+                            {% for card in type_cards|sort(attribute='mana_cost_value', reverse=true) %}
+                            {% set is_played = card.current_count is defined and card.current_count > 0 %}
+                            <li>
                                             <span class="card-hover{% if card.is_playable %} card-playable{% endif %}{% if is_played %} card-played{% endif %}">
                                                 {{ card.name }}
                                                 {% if card.id %}
@@ -270,18 +263,18 @@
                                                          alt="{{ card.name }}">
                                                 {% endif %}
                                             </span>
-                                            {% if is_played %}
-                                                <span class="card-played-indicator">✓</span>{% endif %}
-                                            <div class="mana-cost">
-                                                <span>{{ card.mana_cost_tags | safe }}</span>
-                                            </div>
+                                {% if is_played %}
+                                <span class="card-played-indicator">✓</span>{% endif %}
+                                <div class="mana-cost">
+                                    <span>{{ card.mana_cost_tags | safe }}</span>
+                                </div>
 
-                                        </li>
-                                    {% endfor %}
-                                </ul>
-                            </div>
-                        {% endfor %}
+                            </li>
+                            {% endfor %}
+                        </ul>
                     </div>
+                    {% endfor %}
+                </div>
                 {% endfor %}
             </div>
         </div>

@@ -2,6 +2,8 @@
 #    uv pip compile pyproject.toml -o requirements.txt
 aiofiles==25.1.0
     # via mtga-meta (pyproject.toml)
+aiosqlite==0.21.0
+    # via mtga-meta (pyproject.toml)
 annotated-doc==0.0.4
     # via fastapi
 annotated-types==0.7.0
@@ -362,6 +364,7 @@ typer==0.20.0
     #   fastapi-cloud-cli
 typing-extensions==4.15.0
     # via
+    #   aiosqlite
     #   beautifulsoup4
     #   fastapi
     #   pydantic

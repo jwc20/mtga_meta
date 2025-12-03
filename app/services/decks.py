@@ -1,9 +1,9 @@
-import sqlite3
+import aiosqlite
 from datetime import datetime
 
 
-async def get_decks(cursor: sqlite3.Cursor) -> list[dict]:
-    cursor.execute("""
+async def get_decks(cursor: aiosqlite.Cursor) -> list[dict]:
+    await cursor.execute("""
     SELECT d.id        as deck_id,
            d.name      as deck_name,
            d.source    as deck_source,
@@ -18,9 +18,10 @@ async def get_decks(cursor: sqlite3.Cursor) -> list[dict]:
                         ON d.id = dc.deck_id
              Inner JOIN scryfall_all_cards c
                        ON dc.card_id = c.id
-    ORDER BY added_at DESC;
+    ORDER BY added_at DESC
+    LIMIT 100;
     """)
-    rows = cursor.fetchall()
+    rows = await cursor.fetchall()
 
     cards = [dict(row) for row in rows]
     decks = {}
@@ -50,8 +51,8 @@ async def get_decks(cursor: sqlite3.Cursor) -> list[dict]:
     return list(decks.values())
 
 
-async def add_decks_to_db(conn: sqlite3.Connection, decks: list) -> None:
-    cursor = conn.cursor()
+async def add_decks_to_db(conn: aiosqlite.Connection, decks: list) -> None:
+    cursor = await conn.cursor()
 
     for deck in decks:
         if deck.get("error"):
@@ -59,11 +60,12 @@ async def add_decks_to_db(conn: sqlite3.Connection, decks: list) -> None:
             continue
 
         try:
-            cursor.execute(
+            await cursor.execute(
                 "INSERT INTO decks (name, source, url, added_at) VALUES (?, ?, ?, ?)",
                 (deck["name"], "untapped", deck["url"], datetime.now())
             )
-        except sqlite3.IntegrityError:
+            await conn.commit()
+        except aiosqlite.IntegrityError:
             print(f"Deck {deck['name']} already exists in database")
             continue
         except Exception as e:
@@ -73,21 +75,22 @@ async def add_decks_to_db(conn: sqlite3.Connection, decks: list) -> None:
         deck_id = cursor.lastrowid
 
         for card in deck.get("cards", []):
-            cursor.execute(
+            await cursor.execute(
                 "SELECT id FROM scryfall_all_cards WHERE name = ?",
                 (card["name"],)
             )
-            result = cursor.fetchone()
+            result = await cursor.fetchone()
 
             if not result:
                 print(f"Card {card['name']} not found in database")
-                cursor.execute("SELECT id FROM scryfall_all_cards WHERE printed_name LIKE ? OR flavor_name LIKE ?",
-                               (card["name"], card["name"]))
-                result = cursor.fetchone()
+                await cursor.execute(
+                    "SELECT id FROM scryfall_all_cards WHERE printed_name LIKE ? OR flavor_name LIKE ?",
+                    (card["name"], card["name"]))
+                result = await cursor.fetchone()
 
             card_id = result[0]
-            cursor.execute(
+            await cursor.execute(
                 "INSERT OR IGNORE INTO deck_cards (deck_id, card_id, quantity, name, section) VALUES (?, ?, ?, ?, ?)",
                 (deck_id, card_id, card.get("qty", 1), card["name"], "main")
             )
-            conn.commit()
+            await conn.commit()

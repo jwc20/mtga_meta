@@ -1,35 +1,39 @@
-import sqlite3
+import aiosqlite
+import logging
 from typing import Annotated
 
 from fastapi import Depends
 
 from app.config import db_path, schema_path
 
+logger = logging.getLogger(__name__)
 
-def get_db():
-    conn = sqlite3.connect(db_path, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
+async def get_db():
+    conn = await aiosqlite.connect(db_path, check_same_thread=False)
+    conn.row_factory = aiosqlite.Row
     return conn
 
 
-def get_db_conn():
-    conn = get_db()
+async def get_db_conn():
+    conn = await get_db()
     try:
         yield conn
     finally:
-        conn.close()
+        await conn.close()
 
 
-DBConnDep = Annotated[sqlite3.Connection, Depends(get_db_conn)]
+DBConnDep = Annotated[aiosqlite.Connection, Depends(get_db_conn)]
 
 
-def init_db():
-    conn = get_db()
-    cursor = conn.cursor()
+async def init_db():
+    conn = await get_db()
+    logger.info("Initializing database from schema.sql")
+    cursor = await conn.cursor()
     try:
         with open(schema_path, "r") as f:
-            cursor.executescript(f.read())
-        conn.commit()
-        conn.close()
+            await cursor.executescript(f.read())
+        await conn.commit()
+        logger.info("Database initialized from schema.sql")
+        await conn.close()
     except Exception as e:
         print(f"Warning: Could not initialize database from schema.sql: {e}")

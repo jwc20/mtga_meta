@@ -9,12 +9,14 @@
   .deck {width: 600px; height: 600px; overflow: auto; scrollbar-width: none; display: inline-block; font-size: 0.8rem; padding: 1rem;outline: 1px solid #ccc;margin: 1rem;border-radius: 5px;}
 </style>
 <section>
-    <form hx-post="/add/untapped-decks-html" hx-target="body">
-        <textarea name="html_doc" placeholder="HTML doc text"></textarea>
+    <form data-hx-post="/add/untapped-decks-html" data-hx-target="body">
+        <label for="html_doc">Paste HTML document content:</label>
+        <textarea id="html_doc" name="html_doc" placeholder="HTML doc text" aria-label="HTML document content"></textarea>
         <button type="submit">Add Decks</button>
     </form>
-    <form hx-post="/add/untapped-decks-urls" hx-target="body">
-        <textarea name="url_list" placeholder="urls separated by newlines"></textarea>
+    <form data-hx-post="/add/untapped-decks-urls" data-hx-target="body">
+        <label for="url_list">Enter deck URLs (one per line):</label>
+        <textarea id="url_list" name="url_list" placeholder="urls separated by newlines" aria-label="Deck URLs"></textarea>
         <button type="submit">Add Decks</button>
     </form>
 </section>

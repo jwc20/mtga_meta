@@ -26,13 +26,14 @@ async def add_untapped_decks_url_list_route(
         urls = url_list.split("\n")
         urls = list(set(urls))
         data = await build_untapped_decks_api_urls(urls)
-
+        cursor = await conn.cursor()
+        
         try:
-            decks = await fetch_untapped_decks_from_api(conn=conn, cookies=None, untapped_decks=data)
+            decks = await fetch_untapped_decks_from_api(cursor=cursor, cookies=None, untapped_decks=data)
         except Exception as e:
             decks = []
 
-        cursor = conn.cursor()
+        
         await add_decks_to_db(conn, decks)
         added_decks = await get_decks(cursor)
 
@@ -53,7 +54,7 @@ async def add_untapped_decks_html_route(
     try:
         data = await parse_untapped_html(html_doc)
         await add_decks_by_html(conn, data)
-        cursor = conn.cursor()
+        cursor = await conn.cursor()
         decks = await get_decks(cursor)
         return templates.TemplateResponse(
             request=request, name="untapped.html", context={"decks": decks}

@@ -1,4 +1,4 @@
-import sqlite3
+import aiosqlite
 import asyncio
 from collections import namedtuple
 from datetime import datetime
@@ -52,13 +52,12 @@ async def build_untapped_decks_api_urls(deck_urls: list) -> list[tuple[str, str,
     return untapped_decks
 
 
-async def fetch_untapped_decks_from_api(conn: sqlite3.Connection, cookies: dict | None, untapped_decks: list) -> list[dict]:
+async def fetch_untapped_decks_from_api(cursor: aiosqlite.Cursor, cookies: dict | None, untapped_decks: list) -> list[dict]:
     import httpx
 
     if not cookies:
-        cursor = conn.cursor()
-        cursor.execute("SELECT session_id, csrf_token FROM user_info ORDER BY added_at DESC LIMIT 1")
-        cookies_row = cursor.fetchone()
+        await cursor.execute("SELECT session_id, csrf_token FROM user_info ORDER BY added_at DESC LIMIT 1")
+        cookies_row = await cursor.fetchone()
         cookies = {
             "sessionid": cookies_row[0],
             "csrfToken": cookies_row[1]
@@ -84,6 +83,8 @@ async def fetch_untapped_decks_from_api(conn: sqlite3.Connection, cookies: dict 
                 print(f"Fetched deck: {name}")
                 await asyncio.sleep(2)
 
+
+            # TODO: use logger
             except httpx.HTTPStatusError as e:
                 print(f"HTTP error for {name}: {e.response.status_code}")
                 decks.append({"name": name, "url": url, "cards": [], "error": str(e)})
@@ -97,7 +98,7 @@ async def fetch_untapped_decks_from_api(conn: sqlite3.Connection, cookies: dict 
     return decks
 
 
-async def fetch_untapped_decks_from_html(conn: sqlite3.Connection, data: dict) -> list[dict]:
+async def fetch_untapped_decks_from_html(cursor: aiosqlite.Cursor, data: dict) -> list[dict]:
     cookies = data.get("cookies", {})
     if not cookies:
         raise ValueError("No cookies provided for API requests")
@@ -108,23 +109,21 @@ async def fetch_untapped_decks_from_html(conn: sqlite3.Connection, data: dict) -
         "session_id": data["cookies"]["session_id"],
         "csrf_token": data["cookies"]["csrf_token"],
     }
-
+    
     try:
-        decks = await fetch_untapped_decks_from_api(conn, cookies, untapped_decks)
+        decks = await fetch_untapped_decks_from_api(cursor=cursor, cookies=cookies, untapped_decks=untapped_decks)
     except Exception as e:
         decks = []
 
     return decks
 
 
-async def add_decks_by_html(conn: sqlite3.Connection, data: dict) -> None:
-    cursor = conn.cursor()
-    cursor.execute(
-        "INSERT INTO user_info (sessionid, csrfToken, added_at) VALUES (?, ?, ?)",
+async def add_decks_by_html(conn: aiosqlite.Connection, data: dict) -> None:
+    cursor = await conn.cursor()
+    await cursor.execute(
+        "INSERT INTO user_info (session_id, csrf_token, added_at) VALUES (?, ?, ?)",
         (data["cookies"]["session_id"], data["cookies"]["csrf_token"], datetime.now())
     )
-    conn.commit()
-
-    decks = await fetch_untapped_decks_from_html(conn, data)
-
+    await conn.commit()
+    decks = await fetch_untapped_decks_from_html(cursor=cursor, data=data)
     await add_decks_to_db(conn, decks)

@@ -72,7 +72,7 @@ LOGGING_CONFIG = {
         },
         "file": {
             "()": "app.config.DailyFileHandler",
-            "log_dir": "logs",
+            "log_dir": logger_path,
             "prefix": "app",
             "formatter": "json",
             "level": "DEBUG",
