@@ -4,7 +4,7 @@ from typing import Callable, Optional, TypeVar
 
 import requests.exceptions
 
-import logging_utils
+from seventeenlands import logging_utils
 
 T = TypeVar("T")
 
