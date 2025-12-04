@@ -214,6 +214,7 @@
         {% endif %}
         <div>
             <div class="mana-pool">
+                <p>Basic Mana</p>
                 <table class="mana-table">
                     {% if opponent_mana %}
                     <thead>
@@ -226,6 +227,28 @@
                     <tbody>
                     <tr>
                         {% for color, count in opponent_mana %}
+                        <td>{{ count }}</td>
+                        {% endfor %}
+                    </tr>
+                    </tbody>
+                    {% endif %}
+
+                </table>
+            </div>
+            <div class="mana-pool">
+                <p>Producible Mana(Beta)</p>
+                <table class="mana-table">
+                    {% if producible_mana %}
+                    <thead>
+                    <tr>
+                        {% for color, count in producible_mana %}
+                        <th>{{ color | safe }}</th>
+                        {% endfor %}
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr>
+                        {% for color, count in producible_mana %}
                         <td>{{ count }}</td>
                         {% endfor %}
                     </tr>

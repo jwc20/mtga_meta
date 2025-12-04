@@ -35,15 +35,6 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-async def parse_log_entry(log_entry: LogEntry, last_log_entry: str) -> None:
-    if "cards" in last_log_entry:
-        await log_entry.parse_cards_log_line(last_log_entry)
-    elif "actions" in last_log_entry:
-        await log_entry.parse_actions_log_line(last_log_entry)
-    elif "annotations" in last_log_entry:
-        await log_entry.parse_annotations_log_line(last_log_entry)
-
-
 async def process_missing_cards(conn, cursor, arena_ids: list[str]) -> tuple[list[dict], list[str]]:
     current_deck_cards, missing_ids = await fetch_current_deck_cards(cursor, arena_ids)
 
@@ -115,12 +106,14 @@ async def render_log_update_html(
         current_deck_cards: list[dict],
         matching_decks: list[dict],
         opponent_mana_tags: list[tuple[str, int]],
+        producible_mana_tags: list[tuple[str, int]],
         missing_ids: list[str],
 ) -> str:
     html_content = templates.get_template("list_cards.html").render(
         cards=current_deck_cards,
         matching_decks=matching_decks,
         opponent_mana=opponent_mana_tags,
+        producible_mana=producible_mana_tags,
         missing_ids=missing_ids,
     )
     return html_content.replace("\n", " ")
@@ -139,10 +132,17 @@ async def process_cards(conn, cursor, state: LogState) -> tuple[list[dict], list
 
     return current_deck_cards, matching_decks, missing_ids
 
+async def get_producible_mana(current_deck_cards: list[dict]) -> ManaPool:
+    producible_mana = {}
+    for card in current_deck_cards:
+        if card.get("produced_mana"):
+            for color in card.get("produced_mana").split(","):
+                producible_mana[color] = producible_mana.get(color, 0) + 1
+    return ManaPool(**producible_mana)
+    
+
 
 def process_mana(state: LogState) -> ManaPool:
-    # TODO: maybe go back to using the opponent's card in the battlefield to calculate the opponent's mana pool 
-    
     opponent_mana_dict = build_opponent_mana_from_actions(state.actions_log)
     opponent_mana_dict = update_mana_from_annotations(opponent_mana_dict, state.annotations_log)
     return ManaPool(**opponent_mana_dict)
@@ -153,20 +153,26 @@ async def process_log_update(conn, cursor, state: LogState) -> dict | None:
         return None
 
     current_deck_cards, matching_decks, missing_ids = await process_cards(conn, cursor, state)
+    
+    # get producible mana from current deck
+    producible_mana = await get_producible_mana(current_deck_cards)
     opponent_mana = process_mana(state)
     enrich_decks_with_playability(matching_decks, opponent_mana)
+    
     opponent_mana_tags = build_mana_tags(opponent_mana)
+    producible_mana_tags = build_mana_tags(producible_mana)
 
     return {
         "current_deck_cards": current_deck_cards,
         "matching_decks": matching_decks,
         "opponent_mana_tags": opponent_mana_tags,
+        "producible_mana_tags": producible_mana_tags,
         "missing_ids": missing_ids,
     }
 
 
-def is_relevant_log_entry(log_entry: str) -> bool:
-    return any(key in log_entry for key in ("cards", "actions", "annotations"))
+def is_opponent_log_entry(log_entry: str) -> bool:
+    return "::Opponent::" in log_entry
 
 
 @router.get("/check-logs")
@@ -188,42 +194,34 @@ async def check_logs_stream(request: Request):
                 log_line_count = await get_log_line_count()
                 last_processed = await get_last_processed_count()
 
-                if log_line_count == last_processed:
-                    await asyncio.sleep(0.5)
-                    continue
+                if log_line_count != last_processed:
+                    await set_last_processed_count(log_line_count)
 
-                await set_last_processed_count(log_line_count)
+                    if is_opponent_log_entry(last_log_entry):
+                        await log_entry.parse_opponent_log_line(last_log_entry)
 
-                if not is_relevant_log_entry(last_log_entry):
-                    await asyncio.sleep(0.5)
-                    continue
+                        state = await log_entry.get_current_state()
+                        result = await process_log_update(conn, cursor, state)
 
-                await parse_log_entry(log_entry, last_log_entry)
+                        if result is not None:
+                            html_content = await render_log_update_html(
+                                result["current_deck_cards"],
+                                result["matching_decks"],
+                                result["opponent_mana_tags"],
+                                result["producible_mana_tags"],
+                                result["missing_ids"],
+                            )
 
-                state = await log_entry.get_current_state()
-                result = await process_log_update(conn, cursor, state)
+                            logger.debug(
+                                "Sending log update",
+                                extra={
+                                    "deck_count": len(result["matching_decks"]),
+                                    "card_count": len(result["current_deck_cards"]),
+                                },
+                            )
+                            yield {"event": "log-update", "data": html_content}
 
-                if result is None:
-                    await asyncio.sleep(0.5)
-                    continue
-
-                html_content = await render_log_update_html(
-                    result["current_deck_cards"],
-                    result["matching_decks"],
-                    result["opponent_mana_tags"],
-                    result["missing_ids"],
-                )
-
-                logger.debug(
-                    "Sending log update",
-                    extra={
-                        "deck_count": len(result["matching_decks"]),
-                        "card_count": len(result["current_deck_cards"]),
-                    },
-                )
-                yield {"event": "log-update", "data": html_content}
-
-                await asyncio.sleep(0.1)
+                await asyncio.sleep(0.5)
         finally:
             logger.info("SSE stream closed")
             await conn.close()

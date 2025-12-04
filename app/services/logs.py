@@ -81,60 +81,28 @@ class LogEntry:
     def reset_annotations(self) -> None:
         self._annotations_log = None
 
-    async def parse_cards_log_line(self, log_line: str) -> list[str]:
-        try:
-            log_segments = log_line.split("::")
-            if len(log_segments) < 3:
-                return []
-
-            cards_section = log_segments[2].split(": ")
-            if len(cards_section) < 2:
-                return []
-
-            if "cards" in log_line:
-                arena_ids_str = cards_section[1].strip("[]")
-                self._cards_log = [id.strip() for id in arena_ids_str.split(", ") if id.strip()]
-                return self._cards_log
-
-            return []
-        except (IndexError, AttributeError):
-            return []
-
-    async def parse_actions_log_line(self, log_line: str) -> list[dict]:
+    async def parse_opponent_log_line(self, log_line: str) -> None:
         import jsonpickle
         try:
-            log_segments = log_line.split("::")
-            if len(log_segments) < 3:
-                return []
+            if "::Opponent::" not in log_line:
+                return
 
-            actions_section = log_segments[2]
-            if "actions" in log_line:
-                actions_str = actions_section.split("actions: ")[1]
-                self._actions_log = jsonpickle.decode(actions_str)
-                return self._actions_log
+            content = log_line.split("::Opponent::")[1].strip()
+            parts = [p.strip() for p in content.split(" | ")]
 
-            return []
-        except (IndexError, AttributeError):
-            return []
+            for part in parts:
+                if part.startswith("cards="):
+                    arena_ids_str = part[6:].strip("[]")
+                    self._cards_log = [id.strip() for id in arena_ids_str.split(", ") if id.strip()]
+                elif part.startswith("actions="):
+                    actions_str = part[8:]
+                    self._actions_log = jsonpickle.decode(actions_str)
+                elif part.startswith("annotations="):
+                    annotations_str = part[12:]
+                    self._annotations_log = jsonpickle.decode(annotations_str)
+        except (IndexError, AttributeError, ValueError):
+            pass
 
-    async def parse_annotations_log_line(self, log_line: str) -> list[dict]:
-        import jsonpickle
-        try:
-            log_segments = log_line.split("::")
-            if len(log_segments) < 3:
-                return []
-
-            annotations_str = log_segments[2].strip()
-            if "annotations" in log_line:
-                self._annotations_log = jsonpickle.decode(annotations_str)
-                return self._annotations_log
-
-            return []
-        except (IndexError, AttributeError):
-            return []
-
-
-############################################################################
 
 async def get_last_log_line() -> str | None:
     global log_line_count
@@ -163,22 +131,6 @@ async def get_last_log_line() -> str | None:
     except Exception as e:
         print(f"Error reading log file: {e}")
         return None
-
-
-def parse_arena_ids_from_log(log_entry: str) -> list[str]:
-    try:
-        log_segments = log_entry.split("::")
-        if len(log_segments) < 3:
-            return []
-
-        cards_section = log_segments[2].split(": ")
-        if len(cards_section) < 2:
-            return []
-
-        arena_ids_str = cards_section[1].strip("[]")
-        return [id.strip() for id in arena_ids_str.split(", ") if id.strip()]
-    except (IndexError, AttributeError):
-        return []
 
 
 async def get_log_line_count() -> int:

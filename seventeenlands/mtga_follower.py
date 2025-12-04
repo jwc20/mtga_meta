@@ -840,9 +840,14 @@ class Follower:
                 else:
                     turns_sum = sum(p.get("turnNumber", 0) for p in players)
                     self.turn_count = max(self.turn_count, turns_sum)
-                
-                
-                # game objects
+
+                previous_objects_by_owner = {
+                    owner: list(cards.values())
+                    for owner, cards in self.objects_by_owner.items()
+                }
+                previous_opponent_actions = self.opponent_actions.copy()
+                previous_game_object_annotations = self.game_object_annotations.copy()
+
                 for game_object in game_state_message.get("gameObjects", []):
                     if game_object["type"] not in (
                             "GameObjectType_Card",
@@ -853,39 +858,13 @@ class Follower:
                     owner = game_object["ownerSeatId"]
                     instance_id = game_object["instanceId"]
                     card_id = game_object["overlayGrpId"]
-
-                    # log opponent cards
-                    previous_cards = list(self.objects_by_owner[owner].values()) if instance_id in \
-                                                                                    self.objects_by_owner[
-                                                                                        owner] else None
                     self.objects_by_owner[owner][instance_id] = card_id
-                    # current_cards = list(self.objects_by_owner[owner].items())
-                    current_cards = list(self.objects_by_owner[owner].values())
 
-                    if previous_cards is None or previous_cards != current_cards:
-                        if self.seat_id and owner != self.seat_id:
-                            logger.info(f"::Opponent::cards: {current_cards}")
-                            # logger.info(f"::Opponent (Player {owner})::cards: {current_cards}")
-                            # print(list(self.objects_by_owner[owner].items()))
-                        # else:
-                        #     print(f"player: {instance_id}")
-                        #     print(f"::Player (Player {owner})::cards: {current_cards}")
-                        
-                    # alternative method
-                    # opponent_id = 2 if self.seat_id == 1 else 1
-                    # opponent_card_ids = [
-                    #     c for c in self.objects_by_owner.get(opponent_id, {}).values()
-                    # ]
-
-                
-                # actions
                 actions = game_state_message.get("actions", [])
-                previous_opponent_actions = self.opponent_actions.copy()
                 for zone in game_state_message.get("zones", []):
-                    player_seat_id =self.seat_id
+                    player_seat_id = self.seat_id
                     opponent_seat_id = 2 if player_seat_id == 1 else 1
-                    
-                    # to see what cards are on the battlfield
+
                     if zone["type"] == "ZoneType_Battlefield" or zone["type"] == "ZoneType_Stack":
                         if actions:
                             for action in actions:
@@ -898,8 +877,6 @@ class Follower:
                                     }
                                     self.opponent_actions = list(new_actions.values())
 
-              
-                    # to see what cards are in the player's hand
                     if zone["type"] == "ZoneType_Hand":
                         owner = zone["ownerSeatId"]
                         player_objects = self.objects_by_owner[owner]
@@ -915,41 +892,40 @@ class Follower:
                                 self.drawn_cards_by_instance_id[owner][instance_id] = (
                                     card_id
                                 )
-                                # print(f"player's drawn cards: {self.drawn_cards_by_instance_id}")
 
-                if previous_opponent_actions != self.opponent_actions:
-                    from operator import itemgetter
-                    self.opponent_actions = sorted(self.opponent_actions, key=itemgetter("instanceId"))
-                    logger.info(f"::Opponent::actions: {self.opponent_actions}")
-
-                # annotations
-                previous_game_object_annotations = self.game_object_annotations.copy()
                 for annotation in game_state_message.get("annotations", []):
                     if "AnnotationType_ChoiceResult" in annotation["type"] or "AnnotationType_ColorProduction" in \
                             annotation["type"]:
                         affector_id = annotation.get("affectorId")
-                        # choice_value = annotation.get("details").get("Choice_Value")
                         _details = annotation.get("details")
 
                         for detail in _details:
                             if detail.get("key") == "Choice_Value" or detail.get("key") == "colors":
                                 color_values = detail.get("valueInt32")
-                                # 1 = White
-                                # 2 = Blue
-                                # 4 = Black
-                                # 8 = Red
-                                # 16 = Green
-
                                 self.game_object_annotations.append({
                                     "affectorId": affector_id,
                                     "values": color_values
                                 })
+
+                log_parts = []
+
+                for owner, current_cards_dict in self.objects_by_owner.items():
+                    if self.seat_id and owner != self.seat_id:
+                        current_cards = list(current_cards_dict.values())
+                        previous_cards = previous_objects_by_owner.get(owner, [])
+                        if previous_cards != current_cards:
+                            log_parts.append(f"cards={current_cards}")
+
+                if previous_opponent_actions != self.opponent_actions:
+                    from operator import itemgetter
+                    _actions_sorted = sorted(self.opponent_actions, key=itemgetter("instanceId"))
+                    log_parts.append(f"actions={_actions_sorted}")
+
                 if previous_game_object_annotations != self.game_object_annotations:
-                    logger.info(f"::annotations:: {self.game_object_annotations}")
-                            
-                        
-                        
-                         
+                    log_parts.append(f"annotations={self.game_object_annotations}")
+
+                if log_parts:
+                    logger.info(f"::Opponent:: {' | '.join(log_parts)}")
 
                 players_deciding_hand = {
                     (p["systemSeatNumber"], p.get("mulliganCount", 0))
