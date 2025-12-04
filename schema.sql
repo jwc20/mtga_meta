@@ -13,27 +13,6 @@ CREATE TABLE IF NOT EXISTS user_info
 );
 
 
--- 
--- CREATE TABLE IF NOT EXISTS cards
--- (
---     id            INTEGER PRIMARY KEY,
---     name          TEXT NOT NULL,
---     printed_name  TEXT,
---     flavor_name   TEXT,
---     face_name     TEXT,
---     mana_cost     TEXT,
---     mana_value    REAL,
---     power         TEXT,
---     original_text TEXT,
---     type          TEXT,
---     types         TEXT,
---     mtg_arena_id  TEXT,
---     scryfall_id   TEXT,
---     availability  TEXT,
---     colors        TEXT,
---     keywords      TEXT
--- );
-
 CREATE TABLE IF NOT EXISTS scryfall_all_cards
 (
     object              TEXT,
@@ -116,35 +95,3 @@ CREATE TABLE IF NOT EXISTS deck_base64_strings
     UNIQUE (deck_id)
 )
 
-
-
-
-
-
-
-
---------------------------------------------------------------------------------
---------------------------------------------------------------------------------
---------------------------------------------------------------------------------
--- 
--- ATTACH DATABASE 'AllPrintings.sqlite' AS ap;
--- 
--- INSERT OR IGNORE INTO cards (name, printed_name, flavor_name, mana_cost, mana_value, power, original_text, type, types,
---                              mtg_arena_id, scryfall_id, availability, colors, keywords)
--- SELECT c.name,
---        c.printedName,
---        c.flavorName,
---        c.manaCost,
---        c.manaValue,
---        c.power,
---        c.originalText,
---        c.type,
---        c.types,
---        ci.mtgArenaId,
---        ci.scryfallId,
---        c.availability,
---        c.colors,
---        c.keywords
--- FROM ap.cards c
---          INNER JOIN ap.cardIdentifiers ci ON c.uuid = ci.uuid
--- WHERE c.availability LIKE '%arena%';
