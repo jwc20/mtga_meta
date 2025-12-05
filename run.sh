@@ -6,17 +6,27 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 if [[ "$OSTYPE" == "msys" ]] || [[ "$OSTYPE" == "cygwin" ]] || [[ -n "$WINDIR" ]]; then
-  if [[ -f "venv/Scripts/activate" ]]; then
-    source venv/Scripts/activate
-  elif [[ -f ".venv/Scripts/activate" ]]; then
-    source .venv/Scripts/activate
-  fi
+  VENV_ACTIVATE="Scripts/activate"
 else
-  if [[ -f "venv/bin/activate" ]]; then
-    source venv/bin/activate
-  elif [[ -f ".venv/bin/activate" ]]; then
-    source .venv/bin/activate
+  VENV_ACTIVATE="bin/activate"
+fi
+
+if [[ -f "venv/$VENV_ACTIVATE" ]]; then
+  source "venv/$VENV_ACTIVATE"
+elif [[ -f ".venv/$VENV_ACTIVATE" ]]; then
+  source ".venv/$VENV_ACTIVATE"
+else
+  echo "No virtual environment found. Creating .venv..."
+  python3 -m venv .venv || python -m venv .venv
+  source ".venv/$VENV_ACTIVATE"
+  echo "Installing dependencies..."
+  pip install --upgrade pip
+  if [[ -f "pyproject.toml" ]]; then
+    pip install -e .
+  elif [[ -f "requirements.txt" ]]; then
+    pip install -r requirements.txt
   fi
+  echo "Virtual environment created and activated."
 fi
 
 FOLLOWER_PID=""
