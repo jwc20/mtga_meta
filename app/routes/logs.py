@@ -218,9 +218,6 @@ async def check_logs_stream(request: Request, conn: DBConnDep):
                                 },
                             )
                             yield {"event": "log-update", "data": html_content}
-                else:
-                    html_content = templates.get_template("empty_view.html").render().replace("\n", " ")
-                    yield {"event": "log-update", "data": html_content}
                     
                 await asyncio.sleep(0)
         finally:
