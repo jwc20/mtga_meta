@@ -2,32 +2,50 @@ import aiosqlite
 from datetime import datetime
 
 
+async def delete_deck(conn: aiosqlite.Connection, deck_id: int) -> None:
+    cursor = await conn.cursor()
+    await cursor.execute("DELETE FROM decks WHERE id = ?", (deck_id,))
+    await cursor.execute("DELETE FROM deck_cards WHERE deck_id = ?", (deck_id,))
+    await conn.commit()
+    await cursor.close()
+
+
 async def get_decks(cursor: aiosqlite.Cursor) -> list[dict]:
+    # TODO: make a better query or the get_decks logic and api
     await cursor.execute("""
-    SELECT d.id        as deck_id,
-           d.name      as deck_name,
-           d.source    as deck_source,
-           d.url       as deck_url,
-           c.name      as name,
-           dc.quantity as quantity,
-           c.mana_cost as mana_cost,
-           c.type_line as type_line,
-           c.component as component
-    FROM decks d
-             INNER JOIN deck_cards dc
-                        ON d.id = dc.deck_id
-             Inner JOIN scryfall_all_cards c
-                       ON dc.card_id = c.id
-    ORDER BY added_at DESC
-    LIMIT 100;
+    WITH aaa AS
+    (
+    SELECT     d.id        AS deck_id,
+              d.NAME      AS deck_name,
+              d.source    AS deck_source,
+              d.url       AS deck_url,
+              c.NAME      AS name,
+              dc.quantity AS quantity,
+              c.mana_cost AS mana_cost,
+              c.type_line AS type_line,
+              c.component AS component
+    FROM       decks d
+    INNER JOIN deck_cards dc
+    ON         d.id = dc.deck_id
+    INNER JOIN scryfall_all_cards c
+    ON         dc.card_id = c.id
+    ORDER BY   d.added_at DESC )
+    SELECT aaa.deck_id, aaa.deck_name, aaa.deck_source, aaa.deck_url, aaa.name, aaa.quantity, aaa.mana_cost, aaa.type_line, aaa.component
+    FROM   aaa
+    WHERE  aaa.deck_id IN
+        (
+        SELECT DISTINCT d.id
+        FROM            decks d
+        INNER JOIN      deck_cards dc
+        ON              d.id = dc.deck_id
+        INNER JOIN      scryfall_all_cards c
+        ON              dc.card_id = c.id
+        ORDER BY        d.added_at DESC limit 10);
     """)
     rows = await cursor.fetchall()
-
     cards = [dict(row) for row in rows]
     decks = {}
-
     cards = [card for card in cards if card["component"] != "combo_piece"]
-
     for card in cards:
         deck_id = card["deck_id"]
 
